@@ -89,25 +89,35 @@ class FEAT(FewShotModel):
         self.slf_attn = MultiHeadAttention(1, hdim, hdim, hdim, dropout=0.5)          
         
     def _forward(self, instance_embs, support_idx, query_idx):
+        # print("instance_embs: ", instance_embs.size())  # [80, 640]
         emb_dim = instance_embs.size(-1)
+        
+        # print("support_idx.shape: ", support_idx.shape) # [1, 1, 5]
+        # print("query_idx.shape: ", query_idx.shape)     # [1, 15, 5]
 
         # organize support/query data
         support = instance_embs[support_idx.contiguous().view(-1)].contiguous().view(*(support_idx.shape + (-1,)))
         query   = instance_embs[query_idx.contiguous().view(-1)].contiguous().view(  *(query_idx.shape   + (-1,)))
+        # print("support: ", support.size())  # [1, 1, 5, 640]
+        # print("query: ", query.size())      # [1, 15, 5, 640]
     
         # get mean of the support
         proto = support.mean(dim=1) # Ntask x NK x d
+        # print("proto: ", proto.size())      # [1, 5, 640]
         num_batch = proto.shape[0]
         num_proto = proto.shape[1]
         num_query = np.prod(query_idx.shape[-2:])
     
         # query: (num_batch, num_query, num_proto, num_emb)
         # proto: (num_batch, num_proto, num_emb)
-        proto = self.slf_attn(proto, proto, proto)        
+        proto = self.slf_attn(proto, proto, proto)
+        # print("proto: ", proto.size())      # [1, 5, 640]
         if self.args.use_euclidean:
             query = query.view(-1, emb_dim).unsqueeze(1) # (Nbatch*Nq*Nw, 1, d)
+            # print("query: ", query.size())  # [75, 1, 640]
             proto = proto.unsqueeze(1).expand(num_batch, num_query, num_proto, emb_dim).contiguous()
             proto = proto.view(num_batch*num_query, num_proto, emb_dim) # (Nbatch x Nq, Nk, d)
+            # print("proto: ", proto.size())  # [75, 5, 640]
 
             logits = - torch.sum((proto - query) ** 2, 2) / self.args.temperature
         else:

@@ -112,9 +112,12 @@ class ResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
+        # print("x: ", x.size())  # [80, 640, 5, 5]
         if self.keep_avg_pool:
             x = self.avgpool(x)
+        # print("x: ", x.size())  # [80, 640, 1, 1]
         x = x.view(x.size(0), -1)
+        # print("x: ", x.size())  # [80, 640]
         return x
 
 
