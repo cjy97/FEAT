@@ -104,16 +104,16 @@ class FEAT(FewShotModel):
         # print("support: ", support.size())  # [1, 5, 640, 5, 5]
         # print("query: ", query.size())      # [1, 75, 640, 5, 5]
 
-        # support = support.permute(0, 1, 3, 4, 2)
-        # # print("support: ", support.size())  # [1, 5, 5, 5, 640]
-        # support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
-        # # print("support: ", support.size())  # [1, 125, 640]
-        # support = self.slf_attn(support, support, support)
-        # support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
-        # support = support.permute(0, 1, 4, 2, 3)
-        # # print("support: ", support.size())  # [1, 5, 640, 5, 5]
+        support = support.permute(0, 1, 3, 4, 2)
+        # print("support: ", support.size())  # [1, 5, 5, 5, 640]
+        support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
+        # print("support: ", support.size())  # [1, 125, 640]
+        support = self.slf_attn(support, support, support)
+        support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
+        support = support.permute(0, 1, 4, 2, 3)
+        # print("support: ", support.size())  # [1, 5, 640, 5, 5]
 
-        logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
+        logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) #/ self.args.temperature
         
 
         # # get mean of the support
