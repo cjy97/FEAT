@@ -50,6 +50,8 @@ class FSLTrainer(Trainer):
         
         # start FSL training
         label, label_aux = self.prepare_label()
+        # print("label: ", label.size())              # [75]
+        # print("label_aux: ", label_aux.size())      # [80]
         for epoch in range(1, args.max_epoch + 1):
             self.train_epoch += 1
             self.model.train()
@@ -61,6 +63,9 @@ class FSLTrainer(Trainer):
             ta = Averager()
 
             start_tm = time.time()
+
+            correct = 0 #
+            total = 0   #
             for batch in self.train_loader:
                 self.train_step += 1
 
@@ -74,12 +79,21 @@ class FSLTrainer(Trainer):
 
                 # get saved centers
                 logits, reg_logits = self.para_model(data)
+                # print("logits: ", logits)            # [75, 5]
+                # print("reg_logits: ", reg_logits)    # [80, 5]
                 if reg_logits is not None:
                     loss = F.cross_entropy(logits, label)
                     total_loss = loss + args.balance * F.cross_entropy(reg_logits, label_aux)
                 else:
                     loss = F.cross_entropy(logits, label)
                     total_loss = F.cross_entropy(logits, label)
+                    print("logits: ", logits)
+                    print("label: ", label)
+                    print("loss: ", loss)
+
+                    _, predicted = torch.max(logits, dim=1)
+                    correct += (predicted==label).sum().item()
+                    total += label.size()[0]
                     
                 tl2.add(loss)
                 forward_tm = time.time()
@@ -100,9 +114,12 @@ class FSLTrainer(Trainer):
 
                 # refresh start_tm
                 start_tm = time.time()
+            
+            print("training set correct rate: ", correct/total)
 
             self.lr_scheduler.step()
-            self.try_evaluate(epoch)
+            vl, va, vap = self.try_evaluate(epoch) ###
+            self.epoch_record(epoch, vl, va, vap, train_acc = correct/total)
 
             print('ETA:{}/{}'.format(
                     self.timer.measure(),
@@ -206,3 +223,8 @@ class FSLTrainer(Trainer):
             f.write('Test acc={:.4f} + {:.4f}\n'.format(
                 self.trlog['test_acc'],
                 self.trlog['test_acc_interval']))            
+    
+    def epoch_record(self, epoch, vl, va, vap, train_acc):
+        print(self.args.save_path)
+        with open(osp.join(self.args.save_path, 'record.txt'), 'a') as f:
+            f.write('epoch {}: train_acc={:.4f}, eval_loss={:.4f}, eval_acc={:.4f}+{:.4f}/n'.format(epoch, train_acc, vl, va, vap))

@@ -60,6 +60,8 @@ class Trainer(object, metaclass=abc.ABCMeta):
                 self.trlog['max_acc_interval'] = vap
                 self.trlog['max_acc_epoch'] = self.train_epoch
                 self.save_model('max_acc')
+            
+        return vl, va, vap ###
 
     def try_logging(self, tl1, tl2, ta, tg=None):
         args = self.args
