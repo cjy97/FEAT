@@ -116,7 +116,7 @@ class FEAT(FewShotModel):
         support = support.permute(0, 1, 4, 2, 3)
         # print("support: ", support.size())  # [1, 5, 640, 5, 5]
 
-        logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
+        logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) #/ self.args.temperature
         
 
         # # get mean of the support
