@@ -103,6 +103,7 @@ def prepare_model(args):
         print(pretrained_dict.keys())
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
+        # model.load_state_dict(torch.load(args.init_weights)['params']) ###
 
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
@@ -118,6 +119,9 @@ def prepare_model(args):
     return model, para_model
 
 def prepare_optimizer(model, args):
+    for k, v in model.named_parameters():
+            print("k: ", k, "  v: ", v.size(), "  requires_grad: ", v.requires_grad)
+
     top_para = [v for k,v in model.named_parameters() if 'encoder' not in k]       
     # as in the literature, we use ADAM for ConvNet and SGD for other backbones
     if args.backbone_class == 'ConvNet':
@@ -128,6 +132,7 @@ def prepare_optimizer(model, args):
             # weight_decay=args.weight_decay, do not use weight_decay here
         )                
     else:
+        print("top_para: ", top_para)
         optimizer = optim.SGD(
             [{'params': model.encoder.parameters()},
              {'params': top_para, 'lr': args.lr * args.lr_mul}],

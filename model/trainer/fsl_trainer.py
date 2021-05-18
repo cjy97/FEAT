@@ -87,13 +87,13 @@ class FSLTrainer(Trainer):
                 else:
                     loss = F.cross_entropy(logits, label)
                     total_loss = F.cross_entropy(logits, label)
-                    print("logits: ", logits)
-                    print("label: ", label)
-                    print("loss: ", loss)
+                    # print("logits: ", logits)
+                    # print("label: ", label)
+                    # print("loss: ", loss)
 
-                    _, predicted = torch.max(logits, dim=1)
-                    correct += (predicted==label).sum().item()
-                    total += label.size()[0]
+                _, predicted = torch.max(logits, dim=1)
+                correct += (predicted==label).sum().item()
+                total += label.size()[0]
                     
                 tl2.add(loss)
                 forward_tm = time.time()
@@ -227,4 +227,4 @@ class FSLTrainer(Trainer):
     def epoch_record(self, epoch, vl, va, vap, train_acc):
         print(self.args.save_path)
         with open(osp.join(self.args.save_path, 'record.txt'), 'a') as f:
-            f.write('epoch {}: train_acc={:.4f}, eval_loss={:.4f}, eval_acc={:.4f}+{:.4f}/n'.format(epoch, train_acc, vl, va, vap))
+            f.write('epoch {}: train_acc={:.4f}, eval_loss={:.4f}, eval_acc={:.4f}+{:.4f}\n'.format(epoch, train_acc, vl, va, vap))
