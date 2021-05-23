@@ -132,7 +132,7 @@ def prepare_optimizer(model, args):
             # weight_decay=args.weight_decay, do not use weight_decay here
         )                
     else:
-        print("top_para: ", top_para)
+        # print("top_para: ", top_para)
         optimizer = optim.SGD(
             [{'params': model.encoder.parameters()},
              {'params': top_para, 'lr': args.lr * args.lr_mul}],
