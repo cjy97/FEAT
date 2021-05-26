@@ -20,4 +20,3 @@ python train_fsl.py  \
 --init_weights ./saves/initialization/miniimagenet/Res12-pre.pth \
 --eval_interval 1 \
 --use_euclidean
-
