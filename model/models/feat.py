@@ -71,7 +71,22 @@ class MultiHeadAttention(nn.Module):
         output = self.layer_norm(output + residual)
 
         return output
-    
+
+# class MyTransformer(nn.Module):
+
+#     def __init__(self, depth, hdim):
+#         super().__init__()
+#         self.layers = nn.ModuleList([])
+#         for _ in range(depth):
+#             self.layers.append(MultiHeadAttention(1, hdim, hdim, hdim, dropout=0.5))
+
+#     def forward(self, x):
+#         for layer in self.layers:
+#             x = layer(x, x, x)
+#         return x
+
+
+
 class FEAT(FewShotModel):
     def __init__(self, args):
         super().__init__(args)
@@ -90,7 +105,9 @@ class FEAT(FewShotModel):
 
         # for k, v in self.slf_attn.named_parameters():
         #     v.requires_grad = False
-        
+
+        # self.my_slf_attn = MyTransformer(depth=4, hdim=hdim)
+
         self.dn4_layer = DN4Layer(args.way, args.shot, args.query, n_k = 3)
 
     def _forward(self, instance_embs, support_idx, query_idx):
@@ -112,6 +129,7 @@ class FEAT(FewShotModel):
         support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
         # print("support: ", support.size())  # [1, 125, 640]
         support = self.slf_attn(support, support, support)
+        # support = self.my_slf_attn(support)
         support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
         support = support.permute(0, 1, 4, 2, 3)
         # print("support: ", support.size())  # [1, 5, 640, 5, 5]
