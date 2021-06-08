@@ -108,7 +108,7 @@ class FEAT(FewShotModel):
 
         # self.my_slf_attn = MyTransformer(depth=4, hdim=hdim)
 
-        self.dn4_layer = DN4Layer(args.way, args.shot, args.query, n_k = 3)
+        self.dn4_layer = DN4Layer(args.way, args.shot, args.query, n_k = 5)
 
     def _forward(self, instance_embs, support_idx, query_idx):
         # emb_dim = instance_embs.size(-1)
