@@ -5,8 +5,8 @@ python train_fsl.py  \
 --dataset MiniImageNet \
 --way 5 \
 --eval_way 5 \
---shot 1 \
---eval_shot 1 \
+--shot 5 \
+--eval_shot 5 \
 --query 15 \
 --eval_query 15 \
 --balance 0.01 \

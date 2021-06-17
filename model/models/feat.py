@@ -112,7 +112,6 @@ class FEAT(FewShotModel):
 
     def _forward(self, instance_embs, support_idx, query_idx):
         # emb_dim = instance_embs.size(-1)
-        # print("instance_embs: ", instance_embs.size())  # [80, 640, 5, 5]
         b, emb_dim, h, w = instance_embs.size()
         episode_size = b // (self.args.way * (self.args.shot+self.args.query) )
 
@@ -121,18 +120,22 @@ class FEAT(FewShotModel):
         # query   = instance_embs[query_idx.contiguous().view(-1)]#.contiguous().view(  *(query_idx.shape   + (-1,)))
         support = instance_embs[support_idx.contiguous().view(-1)].unsqueeze(0)
         query   = instance_embs[query_idx.contiguous().view(-1)].unsqueeze(0)
-        # print("support: ", support.size())  # [1, 5, 640, 5, 5]
+
+        support = support.view(episode_size, self.args.shot, self.args.way, emb_dim, h, w)
+        support = support.permute(0, 2, 1, 3, 4, 5)
+        support = support.contiguous().view(episode_size, self.args.way*self.args.shot, emb_dim, h, w)
+        # print("support: ", support.size())  # [1, 5*5, 640, 5, 5]
         # print("query: ", query.size())      # [1, 75, 640, 5, 5]
 
         support = support.permute(0, 1, 3, 4, 2)
-        # print("support: ", support.size())  # [1, 5, 5, 5, 640]
+        # print("support: ", support.size())  # [1, 5*5, 5, 5, 640]
         support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
-        # print("support: ", support.size())  # [1, 125, 640]
+        # print("support: ", support.size())  # [1, 125*5, 640]
         support = self.slf_attn(support, support, support)
         # support = self.my_slf_attn(support)
         support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
         support = support.permute(0, 1, 4, 2, 3)
-        # print("support: ", support.size())  # [1, 5, 640, 5, 5]
+        # print("support: ", support.size())  # [1, 5*5, 640, 5, 5]
 
         logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
         
