@@ -16,7 +16,7 @@ class CrossTransformer(nn.Module):
         self.to_qk = nn.Conv2d(dim, dim_key, 1, bias = False)
         self.to_v = nn.Conv2d(dim, dim_value, 1, bias = False)
 
-    def forward(self, model, img_query, img_supports):
+    def forward(self, query_repr, supports_repr):
         """
         dimensions names:
         
@@ -28,18 +28,29 @@ class CrossTransformer(nn.Module):
         w, j - width
         """
 
-        b, k, *_ = img_supports.shape
+        # b, k, *_ = img_supports.shape
 
-        query_repr = model(img_query)
+        # query_repr = model(img_query)
+        # *_, h, w = query_repr.shape
+
+        # img_supports = rearrange(img_supports, 'b k n c h w -> (b k n) c h w', b = b)
+        # supports_repr = model(img_supports)
+
+        b, k, *_ = supports_repr.shape
         *_, h, w = query_repr.shape
 
-        img_supports = rearrange(img_supports, 'b k n c h w -> (b k n) c h w', b = b)
-        supports_repr = model(img_supports)
+        print("supports_repr: ", supports_repr.size())
+        supports_repr = rearrange(supports_repr, 'b k n c h w -> (b k n) c h w', b = b)
+        print("supports_repr: ", supports_repr.size())
 
         query_q, query_v = self.to_qk(query_repr), self.to_v(query_repr)
 
         supports_k, supports_v = self.to_qk(supports_repr), self.to_v(supports_repr)
         supports_k, supports_v = map(lambda t: rearrange(t, '(b k n) c h w -> b k n c h w', b = b, k = k), (supports_k, supports_v))
+
+        query_q = query_q[0].unsqueeze(0)
+        print("query_q: ", query_q.size())
+        print("supports_k: ", supports_k.size())
 
         sim = einsum('b c h w, b k n c i j -> b k h w n i j', query_q, supports_k) * self.scale
         sim = rearrange(sim, 'b k h w n i j -> b k h w (n i j)')
