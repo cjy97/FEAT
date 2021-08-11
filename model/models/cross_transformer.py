@@ -39,18 +39,16 @@ class CrossTransformer(nn.Module):
         b, k, *_ = supports_repr.shape
         *_, h, w = query_repr.shape
 
-        print("supports_repr: ", supports_repr.size())
+        # print("supports_repr: ", supports_repr.size())
         supports_repr = rearrange(supports_repr, 'b k n c h w -> (b k n) c h w', b = b)
-        print("supports_repr: ", supports_repr.size())
+        # print("supports_repr: ", supports_repr.size())
 
         query_q, query_v = self.to_qk(query_repr), self.to_v(query_repr)
-
         supports_k, supports_v = self.to_qk(supports_repr), self.to_v(supports_repr)
         supports_k, supports_v = map(lambda t: rearrange(t, '(b k n) c h w -> b k n c h w', b = b, k = k), (supports_k, supports_v))
 
-        query_q = query_q[0].unsqueeze(0)
-        print("query_q: ", query_q.size())
-        print("supports_k: ", supports_k.size())
+        # print("query_q: ", query_q.size())
+        # print("supports_k: ", supports_k.size())
 
         sim = einsum('b c h w, b k n c i j -> b k h w n i j', query_q, supports_k) * self.scale
         sim = rearrange(sim, 'b k h w n i j -> b k h w (n i j)')
@@ -60,8 +58,11 @@ class CrossTransformer(nn.Module):
 
         out = einsum('b k h w n i j, b k n c i j -> b k c h w', attn, supports_v)
 
-        out = rearrange(out, 'b k c h w -> b k (c h w)')
-        query_v = rearrange(query_v, 'b c h w -> b () (c h w)')
+        return query_v, out
 
-        euclidean_dist = ((query_v - out) ** 2).sum(dim = -1) / (h * w)
-        return -euclidean_dist
+
+        # out = rearrange(out, 'b k c h w -> b k (c h w)')
+        # query_v = rearrange(query_v, 'b c h w -> b () (c h w)')
+
+        # euclidean_dist = ((query_v - out) ** 2).sum(dim = -1) / (h * w)
+        # return -euclidean_dist
