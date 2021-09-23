@@ -5,7 +5,6 @@ import torch.nn.functional as F
 
 from model.models import FewShotModel
 
-from model.models.cross_transformer import CrossTransformer
 from einops import rearrange
 
 class ScaledDotProductAttention(nn.Module):
@@ -107,12 +106,9 @@ class FEAT(FewShotModel):
         self.slf_attn = MultiHeadAttention(1, hdim, hdim, hdim, dropout=0.5)          
         # for k, v in self.slf_attn.named_parameters():
         #     v.requires_grad = False
-
-        self.cross_attn = CrossTransformer(dim=hdim, dim_key=hdim, dim_value=hdim)
-
         # self.my_slf_attn = MyTransformer(depth=4, hdim=hdim)
 
-        # self.dn4_layer = DN4Layer(args.way, args.shot, args.query, n_k = 5)
+        self.dn4_layer = DN4Layer(args.way, args.shot, args.query, n_k = 5)
 
     def _forward(self, instance_embs, support_idx, query_idx):
         # emb_dim = instance_embs.size(-1)
@@ -123,49 +119,25 @@ class FEAT(FewShotModel):
         # support = instance_embs[support_idx.contiguous().view(-1)]#.contiguous().view(*(support_idx.shape + (-1,)))
         # query   = instance_embs[query_idx.contiguous().view(-1)]#.contiguous().view(  *(query_idx.shape   + (-1,)))
         support = instance_embs[support_idx.contiguous().view(-1)].unsqueeze(0)
-        query   = instance_embs[query_idx.contiguous().view(-1)]#.unsqueeze(0)
+        query   = instance_embs[query_idx.contiguous().view(-1)].unsqueeze(0)
 
         support = support.view(episode_size, self.args.shot, self.args.way, emb_dim, h, w)
         support = support.permute(0, 2, 1, 3, 4, 5)
-        # support = support.contiguous().view(episode_size, self.args.way*self.args.shot, emb_dim, h, w)
-        # print("support: ", support.size())  # [1, 5, 5, 640, 5, 5]
-        # print("query: ", query.size())      # [75, 640, 5, 5]
+        support = support.contiguous().view(episode_size, self.args.way*self.args.shot, emb_dim, h, w)
+        print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
+        print("query: ", query.size())      # [1, 75, 640, 5, 5]
 
-        logits = []
-        for i in range(len(query)):
-            query_i = query[i].unsqueeze(0)
-            query_v, out = self.cross_attn(query_i, support)
 
-            out = out.permute(0, 3, 4, 1, 2).view(-1, self.args.way, emb_dim)
-            # print("out: ", out.size())
-            out = self.slf_attn(out, out, out)
-            
-            out = out.view(1, h, w, self.args.way, emb_dim)
-            out = out.permute(0, 3, 4, 1, 2)
-            # print("out: ", out.size())
+        support = support.permute(0, 1, 3, 4, 2)
+        print("support: ", support.size())  # [1, 5*1, 5, 5, 640]
+        support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
+        print("support: ", support.size())  # [1, 5*25, 640]
+        support = self.slf_attn(support, support, support)
+        support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
+        support = support.permute(0, 1, 4, 2, 3)
+        print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
 
-            out = rearrange(out, 'b k c h w -> b k (c h w)')
-            query_v = rearrange(query_v, 'b c h w -> b () (c h w)')
-
-            euclidean_dist = ((query_v - out) ** 2).sum(dim = -1) / (h * w)
-            logit = -euclidean_dist / self.args.temperature
-
-            logits.append(logit)
-        
-        logits = torch.cat(logits, 0)
-        # print("logits: ", logits)
-
-        # support = support.permute(0, 1, 3, 4, 2)
-        # # print("support: ", support.size())  # [1, 5*5, 5, 5, 640]
-        # support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
-        # # print("support: ", support.size())  # [1, 125*5, 640]
-        # support = self.slf_attn(support, support, support)
-        # # support = self.my_slf_attn(support)
-        # support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
-        # support = support.permute(0, 1, 4, 2, 3)
-        # # print("support: ", support.size())  # [1, 5*5, 640, 5, 5]
-
-        # logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
+        logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
         
 
         # # get mean of the support
