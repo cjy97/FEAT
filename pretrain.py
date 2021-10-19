@@ -157,7 +157,8 @@ if __name__ == '__main__':
         ta = ta.item()
 
         # do not do validation in first 500 epoches
-        if epoch > 100 or (epoch-1) % 5 == 0:
+        # if epoch > 100 or (epoch-1) % 5 == 0:
+        if epoch > 400 or (epoch-1) % 5 == 0:
             model.eval()
             vl_dist = Averager()
             va_dist = Averager()
