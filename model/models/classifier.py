@@ -28,13 +28,23 @@ class Classifier(nn.Module):
         else:
             raise ValueError('')
 
-        self.fc = nn.Linear(hdim, args.num_class)
+        # self.fc = nn.Linear(hdim, args.num_class)
 
-    def forward(self, data, is_emb = False):
-        out = self.encoder(data)
-        if not is_emb:
-            out = self.fc(out)
-        return out
+        self.cls_classifier = nn.Linear(hdim, args.num_class)
+        self.rot_classifier = nn.Linear(args.num_class, 4)
+
+    def forward(self, generated_image, is_emb = False):
+        # print("generated_image: ", generated_image.size())    # [128, 3, 84, 84]
+
+        feat = self.encoder(generated_image)
+        output = self.cls_classifier(feat)
+        rot_output = self.rot_classifier(output)
+
+        return output, rot_output
+
+        # if not is_emb:
+            # out = self.fc(out)
+        # return out
     
     def forward_proto(self, data_shot, data_query, way = None):
         if way is None:
@@ -46,3 +56,4 @@ class Classifier(nn.Module):
         logits_dist = euclidean_metric(query, proto)
         logits_sim = torch.mm(query, F.normalize(proto, p=2, dim=-1).t())
         return logits_dist, logits_sim
+    

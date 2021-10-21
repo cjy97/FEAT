@@ -11,6 +11,26 @@ from model.utils import pprint, set_gpu, ensure_path, Averager, Timer, count_acc
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
+def rot_image_generation(image, target):
+    batch_size = image.size(0)
+    images_90 = image.transpose(2, 3).flip(2)
+    images_180 = image.flip(2).flip(3)
+    images_270 = image.flip(2).transpose(2, 3)
+
+    generated_image = torch.cat([image, images_90, images_180, images_270], dim=0)
+    generated_target = target.repeat(4)
+
+    rot_target = torch.zeros(batch_size * 4)
+    rot_target[batch_size:] += 1
+    rot_target[batch_size * 2 :] += 1
+    rot_target[batch_size * 3 :] += 1
+    rot_target = F.one_hot(rot_target.to(torch.int64), 4).float().cuda()
+
+    return generated_image, generated_target, rot_target
+
+
 # pre-train model, compute validation acc after 500 epoches
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -28,7 +48,7 @@ if __name__ == '__main__':
     args.orig_imsize = -1
     pprint(vars(args))
     
-    save_path1 = '-'.join([args.dataset, args.backbone_class, 'Pre'])
+    save_path1 = '-'.join([args.dataset, args.backbone_class, 'SS_Pre'])
     save_path2 = '_'.join([str(args.lr), str(args.gamma), str(args.schedule)])
     args.save_path = osp.join(save_path1, save_path2)
     if not osp.exists(save_path1):
@@ -138,9 +158,16 @@ if __name__ == '__main__':
             else:
                 data, label = batch
                 label = label.type(torch.LongTensor)
-            logits = model(data)
-            loss = criterion(logits, label)
-            acc = count_acc(logits, label)
+
+            generated_image, generated_target, rot_target = rot_image_generation(data, label)
+            # logits = model(generated_image)
+            output, rot_output = model(generated_image)
+
+            gamma_loss = criterion(output, generated_target)
+            alpha_loss = torch.sum(F.binary_cross_entropy_with_logits(rot_output, rot_target))
+            loss = gamma_loss * 1.0 + alpha_loss * 0.1
+
+            acc = count_acc(output, generated_target)
             writer.add_scalar('data/loss', float(loss), global_count)
             writer.add_scalar('data/acc', float(acc), global_count)
             if (i-1) % 100 == 0:
@@ -157,7 +184,8 @@ if __name__ == '__main__':
         ta = ta.item()
 
         # do not do validation in first 500 epoches
-        if epoch > 100 or (epoch-1) % 5 == 0:
+        # if epoch > 100 or (epoch-1) % 5 == 0:
+        if epoch > 400 or (epoch-1) % 5 == 0:
             model.eval()
             vl_dist = Averager()
             va_dist = Averager()
