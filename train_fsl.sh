@@ -10,7 +10,7 @@ python train_fsl.py  \
 --query 15 \
 --eval_query 15 \
 --balance 0.01 \
---temperature 64 \
+--temperature 12 \
 --temperature2 64 \
 --lr 0.0002 \
 --lr_mul 10 \
