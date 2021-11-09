@@ -101,7 +101,7 @@ class FEAT(FewShotModel):
             args.encoder_path,
             args.is_distill,
         )
-        self.local_kd = Local_KD(args.way, args.shot+args.query)
+        # self.local_kd = Local_KD(args.way, args.shot+args.query)
 
     def _forward(self, x, support_idx, query_idx):
 
@@ -174,13 +174,27 @@ class FEAT(FewShotModel):
             logits_reg = None
             
             # calc Local Distillation Loss while training
-            student_feat = instance_embs.unsqueeze(0)
-            teacher_feat = self.distill_layer(x).unsqueeze(0)
-            # print("student_feat: ", student_feat)    # [1, 80, 640, 5, 5]
-            # print("teacher_feat: ", teacher_feat)    # [1, 80, 640, 5, 5]
-            # print("the kl is zero?: ", self.local_kd(student_feat, student_feat))
-            local_kd_loss = self.local_kd(student_feat, teacher_feat)
+            student_feat = instance_embs#.unsqueeze(0)
+            teacher_feat = self.distill_layer(x)#.unsqueeze(0)
+            # print("student_feat: ", student_feat.size())    # [80, 640, 5, 5]
+            # print("teacher_feat: ", teacher_feat.size())    # [80, 640, 5, 5]
 
+            student_feat = student_feat.permute(0, 2, 3, 1).contiguous().view(b*h*w, emb_dim)
+            teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b*h*w, emb_dim)
+
+            T = 4.0
+            p_s = F.log_softmax(student_feat / T, dim=1)
+            p_t = F.softmax(teacher_feat / T, dim=1)
+            local_kd_loss = F.kl_div(
+                p_s,
+                p_t,
+                size_average=False
+            ) * (T**2) / student_feat.size(0)
+            print("local_kd_loss: ", local_kd_loss)
+            # print("the kl is zero?: ", self.local_kd(student_feat, student_feat))
+            # local_kd_loss = self.local_kd(student_feat, teacher_feat)
+
+            
             
 
             # print("training--")

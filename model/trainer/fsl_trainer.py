@@ -88,7 +88,7 @@ class FSLTrainer(Trainer):
                     total_loss = loss + args.balance * F.cross_entropy(reg_logits, label_aux)
                 else:
                     ce_loss = F.cross_entropy(logits, label)
-                    kl_loss = local_kd_loss * 0.01
+                    kl_loss = local_kd_loss# * 0.01
                     sum_ce_loss += ce_loss
                     sum_kl_loss += kl_loss
                     print("CE_LOSS: ", ce_loss)
