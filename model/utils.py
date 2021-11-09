@@ -181,4 +181,6 @@ def get_command_line_parser():
     parser.add_argument('--eval_interval', type=int, default=1)
     parser.add_argument('--save_dir', type=str, default='./checkpoints')
     
+    parser.add_argument("--is_distill", type=bool, default=True)
+    parser.add_argument("--encoder_path", type=str, default=None)
     return parser

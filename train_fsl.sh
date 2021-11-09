@@ -16,7 +16,9 @@ python train_fsl.py  \
 --lr_mul 10 \
 --lr_scheduler step \
 --step_size 40 --gamma 0.5 \
---gpu 1 \
+--gpu 3 \
 --init_weights ./saves/initialization/miniimagenet/Res12-pre.pth \
 --eval_interval 1 \
---use_euclidean
+--use_euclidean \
+--is_distill True \
+--encoder_path ./saves/initialization/miniimagenet/max_acc.pth

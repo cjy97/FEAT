@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from model.models import FewShotModel
 
 from einops import rearrange
+import copy
 
 class ScaledDotProductAttention(nn.Module):
     ''' Scaled Dot-Product Attention '''
@@ -74,20 +75,6 @@ class MultiHeadAttention(nn.Module):
 
         return output
 
-# class MyTransformer(nn.Module):
-
-#     def __init__(self, depth, hdim):
-#         super().__init__()
-#         self.layers = nn.ModuleList([])
-#         for _ in range(depth):
-#             self.layers.append(MultiHeadAttention(1, hdim, hdim, hdim, dropout=0.5))
-
-#     def forward(self, x):
-#         for layer in self.layers:
-#             x = layer(x, x, x)
-#         return x
-
-
 
 class FEAT(FewShotModel):
     def __init__(self, args):
@@ -103,17 +90,28 @@ class FEAT(FewShotModel):
         else:
             raise ValueError('')
         
-        self.slf_attn = MultiHeadAttention(1, hdim, hdim, hdim, dropout=0.5)          
+        # self.slf_attn = MultiHeadAttention(1, hdim, hdim, hdim, dropout=0.5)          
         # for k, v in self.slf_attn.named_parameters():
         #     v.requires_grad = False
-        # self.my_slf_attn = MyTransformer(depth=4, hdim=hdim)
 
         self.dn4_layer = DN4Layer(args.way, args.shot, args.query, n_k = 5)
 
-    def _forward(self, instance_embs, support_idx, query_idx):
+        self.distill_layer = DistillLayer(
+            self.encoder,
+            args.encoder_path,
+            args.is_distill,
+        )
+        self.local_kd = Local_KD(args.way, args.shot+args.query)
+
+    def _forward(self, x, support_idx, query_idx):
+
+        # print("x.size(): ", x.size())   # [80, 3, 84, 84]
+        instance_embs = self.encoder(x)
+
         # emb_dim = instance_embs.size(-1)
         b, emb_dim, h, w = instance_embs.size()
         episode_size = b // (self.args.way * (self.args.shot+self.args.query) )
+
 
         # organize support/query data
         # support = instance_embs[support_idx.contiguous().view(-1)]#.contiguous().view(*(support_idx.shape + (-1,)))
@@ -124,18 +122,18 @@ class FEAT(FewShotModel):
         support = support.view(episode_size, self.args.shot, self.args.way, emb_dim, h, w)
         support = support.permute(0, 2, 1, 3, 4, 5)
         support = support.contiguous().view(episode_size, self.args.way*self.args.shot, emb_dim, h, w)
-        print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
-        print("query: ", query.size())      # [1, 75, 640, 5, 5]
+        # print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
+        # print("query: ", query.size())      # [1, 75, 640, 5, 5]
 
 
-        support = support.permute(0, 1, 3, 4, 2)
-        print("support: ", support.size())  # [1, 5*1, 5, 5, 640]
-        support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
-        print("support: ", support.size())  # [1, 5*25, 640]
-        support = self.slf_attn(support, support, support)
-        support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
-        support = support.permute(0, 1, 4, 2, 3)
-        print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
+        # support = support.permute(0, 1, 3, 4, 2)
+        # print("support: ", support.size())  # [1, 5*1, 5, 5, 640]
+        # support = support.contiguous().view(episode_size, (self.args.way*self.args.shot) * (h*w), emb_dim)
+        # print("support: ", support.size())  # [1, 5*25, 640]
+        # support = self.slf_attn(support, support, support)
+        # support = support.view(episode_size, self.args.way*self.args.shot , h, w, emb_dim)
+        # support = support.permute(0, 1, 4, 2, 3)
+        # print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
 
         logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
         
@@ -175,6 +173,15 @@ class FEAT(FewShotModel):
 
             logits_reg = None
             
+            # calc Local Distillation Loss while training
+            student_feat = instance_embs.unsqueeze(0)
+            teacher_feat = self.distill_layer(x).unsqueeze(0)
+            # print("student_feat: ", student_feat)    # [1, 80, 640, 5, 5]
+            # print("teacher_feat: ", teacher_feat)    # [1, 80, 640, 5, 5]
+            # print("the kl is zero?: ", self.local_kd(student_feat, student_feat))
+            local_kd_loss = self.local_kd(student_feat, teacher_feat)
+
+            
 
             # print("training--")
             # aux_task = torch.cat([support.view(1, self.args.shot, self.args.way, emb_dim), 
@@ -212,10 +219,23 @@ class FEAT(FewShotModel):
             #     logits_reg = torch.bmm(aux_task, aux_center.permute([0,2,1])) / self.args.temperature2
             #     logits_reg = logits_reg.view(-1, num_proto)            
             
-            return logits, logits_reg            
+            return logits, logits_reg, local_kd_loss
         else:
             return logits   
 
+# class DistillKLLoss(nn.Module):
+#     def __init__(self, T):
+#         super(DistillKLLoss, self).__init__()
+#         self.T = T
+
+#     def forward(self, y_s, y_t):
+#         if y_t is None:
+#             return 0.0
+
+#         p_s = F.log_softmax(y_s / self.T, dim=1)
+#         p_t = F.softmax(y_t / self.T, dim=1)
+#         loss = F.kl_div(p_s, p_t, size_average=False) * (self.T ** 2) / y_s.size(0)
+#         return loss
 
 class DN4Layer(nn.Module):
     def __init__(self, way_num, shot_num, query_num, n_k):
@@ -248,3 +268,127 @@ class DN4Layer(nn.Module):
         score = torch.sum(topk_value, dim=[3, 4])
         # print("dn4 output score: ", score.size())   # [1, 75, 5]
         return score
+
+class DistillLayer(nn.Module):
+    def __init__(
+        self,
+        encoder,
+        encoder_path,
+        is_distill,
+    ):
+        super(DistillLayer, self).__init__()
+        self.encoder = self._load_state_dict(encoder, encoder_path, is_distill)
+
+    def _load_state_dict(self, model, state_dict_path, is_distll):
+        new_model = None
+        if is_distll and state_dict_path is not None:
+            new_model = copy.deepcopy(model)    # 先复制网络结构
+
+            model_dict = new_model.state_dict()
+            
+            pretrained_dict = torch.load(state_dict_path)['params']
+            pretrained_dict = {k.replace("encoder.", ""): v for k, v in pretrained_dict.items() if k.replace("encoder.", "") in model_dict}
+            
+            model_dict.update(pretrained_dict)
+            new_model.load_state_dict(model_dict)   # 只将权重加载给教师模型
+
+        return new_model
+
+    @torch.no_grad()
+    def forward(self, x):
+        local_features = None
+        if self.encoder is not None:
+            local_features = self.encoder(x)
+        
+        return local_features
+
+
+class Local_KD(nn.Module):
+    def __init__(self, way_num, shot_query):
+        super(Local_KD, self).__init__()
+
+        self.way_num = way_num
+        self.shot_query = shot_query
+        # self.n_k = n_k
+        # self.device = device
+        # self.normLayer = nn.BatchNorm1d(self.way_num * 2, affine=True)
+        # self.fcLayer = nn.Conv1d(1, 1, kernel_size=2, stride=1, dilation=5, bias=False)
+    
+    # def _cal_cov_matrix_batch(self, feat):
+    #     e, _, n_local, c = feat.size()
+    #     feature_mean = torch.mean(feat, 2, True)
+    #     feat = feat - feature_mean
+    #     cov_matrix = torch.matmul(feat.permute(0, 1, 3, 2), feat)
+    #     cov_matrix = torch.div(cov_matrix, n_local-1)
+    #     cov_matrix = cov_matrix + 0.01 * torch.eye(c).to(self.device)
+
+    #     return feature_mean, cov_matrix
+
+    def _cal_cov_batch(self, feat):
+        e, b, c, h, w = feat.size()
+        feat = feat.view(e, b, c, -1).permute(0, 1, 3, 2).contiguous()   # e, b, h*w, c
+        feat = feat.view(e, 1, b*h*w, c)                    # e, 1, b*h*w, c
+        feat_mean = torch.mean(feat, 2, True)               # e, 1, 1, c
+        feat = feat - feat_mean
+        cov_matrix = torch.matmul(feat.permute(0, 1, 3, 2), feat)   # e, 1, c, c
+        cov_matrix = torch.div(cov_matrix, b*h*w-1) # b*h*w !!
+        cov_matrix = cov_matrix + 0.01 * torch.eye(c).cuda() #to(self.device)
+
+        return feat_mean, cov_matrix
+
+    def _calc_kl_dist_batch(self, mean1, cov1, mean2, cov2):
+        print("mean1: ", mean1.size())  # [e, 1, 1, 640]
+        print("cov1: ", cov1.size())    # [e, 1, 640, 640]
+        print("mean2: ", mean2.size())  # [e, 1, 1, 640]
+        print("cov2: ", cov2.size())    # [e, 1, 640, 640]
+
+        cov2_inverse = torch.inverse(cov2)
+        mean_diff = -(mean1 - mean2.squeeze(2).unsqueeze(1))
+
+        matrix_prod = torch.matmul(
+            cov1.unsqueeze(2), cov2_inverse.unsqueeze(1)
+        )
+        # print("matrix_prod: ", matrix_prod.size())
+
+        trace_dist = torch.diagonal(matrix_prod, offset=0, dim1=-2, dim2=-1)
+        trace_dist = torch.sum(trace_dist, dim=-1)
+        # print("trace_dist: ", trace_dist.size())
+
+        maha_prod = torch.matmul(
+            mean_diff.unsqueeze(3), cov2_inverse.unsqueeze(1)
+        )
+        maha_prod = torch.matmul(maha_prod, mean_diff.unsqueeze(4))
+        maha_prod = maha_prod.squeeze(4)
+        maha_prod = maha_prod.squeeze(3)
+
+        matrix_det = torch.slogdet(cov2).logabsdet.unsqueeze(1) - torch.slogdet(
+            cov1
+        ).logabsdet.unsqueeze(2)
+
+        kl_dist = trace_dist + maha_prod + matrix_det - mean1.size(3)
+
+        return kl_dist / 2.0
+
+
+    # 输入单个episode的所有样本（不区分support/query），返还局部蒸馏损失。
+    def forward(self, student_feat, teacher_feat):
+        e, b, c, h, w = student_feat.size()
+
+        student_mean, student_cov = self._cal_cov_batch(student_feat)
+        student_mean = student_mean.permute(1, 0, 2, 3)
+        student_cov = student_cov.permute(1, 0, 2, 3)
+        # student_feat = student_feat.view(e, b, c, -1).permute(0, 1, 3, 2).contiguous()
+
+        teacher_mean, teacher_cov = self._cal_cov_batch(teacher_feat)
+        teacher_mean = teacher_mean.permute(1, 0, 2, 3)
+        teacher_cov = teacher_cov.permute(1, 0, 2, 3)
+        # teacher_feat = teacher_feat.view(e, b, c, -1).permute(0, 1, 3, 2).contiguous()
+
+        kl_dis = self._calc_kl_dist_batch(student_mean, student_cov, teacher_mean, teacher_cov)
+        print("kl_dis: ", kl_dis.size())    # [e, 1, 1]
+        # print(kl_dis)
+
+        kl_mean = kl_dis.mean()
+        print("kl_mean: ", kl_mean)
+
+        return kl_mean

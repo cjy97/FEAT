@@ -66,6 +66,8 @@ class FSLTrainer(Trainer):
 
             correct = 0 #
             total = 0   #
+            sum_ce_loss = 0.0
+            sum_kl_loss = 0.0
             for batch in self.train_loader:
                 self.train_step += 1
 
@@ -78,15 +80,21 @@ class FSLTrainer(Trainer):
                 self.dt.add(data_tm - start_tm)
 
                 # get saved centers
-                logits, reg_logits = self.para_model(data)
+                logits, reg_logits, local_kd_loss = self.para_model(data)
                 # print("logits: ", logits)            # [75, 5]
                 # print("reg_logits: ", reg_logits)    # [80, 5]
                 if reg_logits is not None:
                     loss = F.cross_entropy(logits, label)
                     total_loss = loss + args.balance * F.cross_entropy(reg_logits, label_aux)
                 else:
-                    loss = F.cross_entropy(logits, label)
-                    total_loss = F.cross_entropy(logits, label)
+                    ce_loss = F.cross_entropy(logits, label)
+                    kl_loss = local_kd_loss * 0.01
+                    sum_ce_loss += ce_loss
+                    sum_kl_loss += kl_loss
+                    print("CE_LOSS: ", ce_loss)
+                    print("KD_LOSS: ", kl_loss)
+                    loss = ce_loss + kl_loss
+                    total_loss = ce_loss + kl_loss
                     # print("logits: ", logits)
                     # print("label: ", label)
                     # print("loss: ", loss)
@@ -119,7 +127,7 @@ class FSLTrainer(Trainer):
 
             self.lr_scheduler.step()
             vl, va, vap = self.try_evaluate(epoch) ###
-            self.epoch_record(epoch, vl, va, vap, train_acc = correct/total)
+            self.epoch_record(epoch, vl, va, vap, train_acc = correct/total, avg_ce_loss = sum_ce_loss / len(self.train_loader), avg_kl_loss = sum_kl_loss / len(self.train_loader))
 
             print('ETA:{}/{}'.format(
                     self.timer.measure(),
@@ -224,7 +232,7 @@ class FSLTrainer(Trainer):
                 self.trlog['test_acc'],
                 self.trlog['test_acc_interval']))            
     
-    def epoch_record(self, epoch, vl, va, vap, train_acc):
+    def epoch_record(self, epoch, vl, va, vap, train_acc, avg_ce_loss, avg_kl_loss):
         print(self.args.save_path)
         with open(osp.join(self.args.save_path, 'record.txt'), 'a') as f:
-            f.write('epoch {}: train_acc={:.4f}, eval_loss={:.4f}, eval_acc={:.4f}+{:.4f}\n'.format(epoch, train_acc, vl, va, vap))
+            f.write('epoch {}: train_acc={:.4f}, eval_loss={:.4f}, eval_acc={:.4f}+{:.4f}, avg_ce_loss={:.4f}, avg_kl_loss={:.4f}\n'.format(epoch, train_acc, vl, va, vap, avg_ce_loss, avg_kl_loss))
