@@ -11,6 +11,8 @@ from model.utils import pprint, set_gpu, ensure_path, Averager, Timer, count_acc
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+
 # pre-train model, compute validation acc after 500 epoches
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -82,6 +84,7 @@ if __name__ == '__main__':
                  'trlog': trlog,
                  'val_acc_dist': trlog['max_acc_dist'],
                  'val_acc_sim': trlog['max_acc_sim'],
+                 'val_acc_dn4': trlog['max_acc_dn4'],
                  'optimizer' : optimizer.state_dict(),
                  'global_count': global_count}
         
@@ -107,13 +110,17 @@ if __name__ == '__main__':
         trlog['train_loss'] = []
         trlog['val_loss_dist'] = []
         trlog['val_loss_sim'] = []
+        trlog['val_loss_dn4'] = []
         trlog['train_acc'] = []
         trlog['val_acc_sim'] = []
         trlog['val_acc_dist'] = []
+        trlog['val_acc_dn4'] = []
         trlog['max_acc_dist'] = 0.0
         trlog['max_acc_dist_epoch'] = 0
         trlog['max_acc_sim'] = 0.0
         trlog['max_acc_sim_epoch'] = 0        
+        trlog['max_acc_dn4'] = 0.0
+        trlog['max_acc_dn4_epoch'] = 0   
         initial_lr = args.lr
         global_count = 0
 
@@ -157,14 +164,18 @@ if __name__ == '__main__':
         ta = ta.item()
 
         # do not do validation in first 500 epoches
-        if epoch > 100 or (epoch-1) % 5 == 0:
+        # if epoch > 100 or (epoch-1) % 5 == 0:
+        if epoch > 400 or (epoch-1) % 5 == 0:
             model.eval()
             vl_dist = Averager()
             va_dist = Averager()
             vl_sim = Averager()
             va_sim = Averager()            
+            vl_dn4 = Averager()
+            va_dn4 = Averager()
             print('[Dist] best epoch {}, current best val acc={:.4f}'.format(trlog['max_acc_dist_epoch'], trlog['max_acc_dist']))
             print('[Sim] best epoch {}, current best val acc={:.4f}'.format(trlog['max_acc_sim_epoch'], trlog['max_acc_sim']))
+            print('[Dn4] best epoch {}, current best val acc={:.4f}'.format(trlog['max_acc_dn4_epoch'], trlog['max_acc_dn4']))
             # test performance with Few-Shot
             label = torch.arange(valset.num_class).repeat(args.query)
             if torch.cuda.is_available():
@@ -178,25 +189,35 @@ if __name__ == '__main__':
                     else:
                         data, _ = batch
                     data_shot, data_query = data[:valset.num_class], data[valset.num_class:] # 16-way test
-                    logits_dist, logits_sim = model.forward_proto(data_shot, data_query, valset.num_class)
+                    logits_dist, logits_sim, logits_dn4 = model.forward_proto(data_shot, data_query, valset.num_class)
+                    
                     loss_dist = F.cross_entropy(logits_dist, label)
                     acc_dist = count_acc(logits_dist, label)
                     loss_sim = F.cross_entropy(logits_sim, label)
                     acc_sim = count_acc(logits_sim, label)                    
+                    loss_dn4 = F.cross_entropy(logits_dn4, label)
+                    acc_dn4 = count_acc(logits_dn4, label) 
+                    
                     vl_dist.add(loss_dist.item())
                     va_dist.add(acc_dist)
                     vl_sim.add(loss_sim.item())
                     va_sim.add(acc_sim)                    
+                    vl_dn4.add(loss_dn4.item())
+                    va_dn4.add(acc_dn4)   
 
             vl_dist = vl_dist.item()
             va_dist = va_dist.item()
             vl_sim = vl_sim.item()
-            va_sim = va_sim.item()            
+            va_sim = va_sim.item() 
+            vl_dn4 = vl_dn4.item()
+            va_dn4 = va_dn4.item()            
             writer.add_scalar('data/val_loss_dist', float(vl_dist), epoch)
             writer.add_scalar('data/val_acc_dist', float(va_dist), epoch)     
             writer.add_scalar('data/val_loss_sim', float(vl_sim), epoch)
             writer.add_scalar('data/val_acc_sim', float(va_sim), epoch)               
-            print('epoch {}, val, loss_dist={:.4f} acc_dist={:.4f} loss_sim={:.4f} acc_sim={:.4f}'.format(epoch, vl_dist, va_dist, vl_sim, va_sim))
+            writer.add_scalar('data/val_loss_dn4', float(vl_dn4), epoch)
+            writer.add_scalar('data/val_acc_dn4', float(va_dn4), epoch) 
+            print('epoch {}, val, loss_dist={:.4f} acc_dist={:.4f} loss_sim={:.4f} acc_sim={:.4f} loss_dn4={:.4f} acc_dn4={:.4f}'.format(epoch, vl_dist, va_dist, vl_sim, va_sim, vl_dn4, va_dn4))
     
             if va_dist > trlog['max_acc_dist']:
                 trlog['max_acc_dist'] = va_dist
@@ -209,13 +230,21 @@ if __name__ == '__main__':
                 trlog['max_acc_sim_epoch'] = epoch
                 save_model('max_acc_sim')
                 save_checkpoint(True)            
+                
+            if va_dn4 > trlog['max_acc_dn4']:
+                trlog['max_acc_dn4'] = va_sim
+                trlog['max_acc_dn4_epoch'] = epoch
+                save_model('max_acc_dn4')
+                save_checkpoint(True)     
     
             trlog['train_loss'].append(tl)
             trlog['train_acc'].append(ta)
             trlog['val_loss_dist'].append(vl_dist)
             trlog['val_acc_dist'].append(va_dist)
             trlog['val_loss_sim'].append(vl_sim)
-            trlog['val_acc_sim'].append(va_sim)            
+            trlog['val_acc_sim'].append(va_sim)       
+            trlog['val_loss_dn4'].append(vl_dn4)
+            trlog['val_acc_dn4'].append(va_dn4)       
             save_model('epoch-last')
     
             print('ETA:{}/{}'.format(timer.measure(), timer.measure(epoch / args.max_epoch)))
