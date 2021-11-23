@@ -189,7 +189,7 @@ class FEAT(FewShotModel):
                 p_s,
                 p_t,
                 size_average=False
-            ) * (T**2) / student_feat.size(0)
+            ) * (T**2) #/ student_feat.size(0)
             print("local_kd_loss: ", local_kd_loss)
             # print("the kl is zero?: ", self.local_kd(student_feat, student_feat))
             # local_kd_loss = self.local_kd(student_feat, teacher_feat)

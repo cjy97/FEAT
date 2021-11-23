@@ -88,7 +88,7 @@ class FSLTrainer(Trainer):
                     total_loss = loss + args.balance * F.cross_entropy(reg_logits, label_aux)
                 else:
                     ce_loss = F.cross_entropy(logits, label)
-                    kl_loss = local_kd_loss# * 0.01
+                    kl_loss = local_kd_loss * 0.1
                     sum_ce_loss += ce_loss
                     sum_kl_loss += kl_loss
                     print("CE_LOSS: ", ce_loss)
@@ -179,7 +179,9 @@ class FSLTrainer(Trainer):
         # restore model args
         args = self.args
         # evaluation mode
-        self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'max_acc.pth'))['params'])
+        #self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'max_acc.pth'))['params'])
+        self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'epoch-last.pth'))['params'])
+
         self.model.eval()
         record = np.zeros((10000, 2)) # loss and acc
         label = torch.arange(args.eval_way, dtype=torch.int16).repeat(args.eval_query)
