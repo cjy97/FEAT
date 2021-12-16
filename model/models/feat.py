@@ -179,18 +179,31 @@ class FEAT(FewShotModel):
             # print("student_feat: ", student_feat.size())    # [80, 640, 5, 5]
             # print("teacher_feat: ", teacher_feat.size())    # [80, 640, 5, 5]
 
-            student_feat = student_feat.permute(0, 2, 3, 1).contiguous().view(b*h*w, emb_dim)
-            teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b*h*w, emb_dim)
+            student_feat = student_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim)
+            teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim)
 
-            T = 4.0
-            p_s = F.log_softmax(student_feat / T, dim=1)
-            p_t = F.softmax(teacher_feat / T, dim=1)
-            local_kd_loss = F.kl_div(
-                p_s,
-                p_t,
-                size_average=False
-            ) * (T**2) #/ student_feat.size(0)
+            student_relation = torch.matmul(F.normalize(student_feat, p=2, dim=-1), 
+                                            torch.transpose(F.normalize(student_feat, p=2, dim=-1), -1, -2))
+
+            teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1), 
+                                            torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))
+            # print("teacher_relation matrix: ", teacher_relation.size()) # [80, 25, 25]
+            # print("teacher_relation matrix: ", teacher_relation)
+
+            # criterion = nn.L1Loss(size_average=False, reduce=True)
+            criterion = nn.MSELoss(size_average=False, reduce=True)
+            local_kd_loss = criterion(teacher_relation, student_relation)
             print("local_kd_loss: ", local_kd_loss)
+
+            # T = 4.0
+            # p_s = F.log_softmax(student_feat / T, dim=1)
+            # p_t = F.softmax(teacher_feat / T, dim=1)
+            # local_kd_loss = F.kl_div(
+            #     p_s,
+            #     p_t,
+            #     size_average=False
+            # ) * (T**2) #/ student_feat.size(0)
+            # print("local_kd_loss: ", local_kd_loss)
             # print("the kl is zero?: ", self.local_kd(student_feat, student_feat))
             # local_kd_loss = self.local_kd(student_feat, teacher_feat)
 
