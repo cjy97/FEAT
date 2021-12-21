@@ -118,7 +118,7 @@ def postprocess_args(args):
                            'T1{}T2{}'.format(args.temperature, args.temperature2),
                            'b{}'.format(args.balance),
                            'bsz{:03d}'.format( max(args.way, args.num_classes)*(args.shot+args.query) ),
-                           # str(time.strftime('%Y%m%d_%H%M%S'))
+                           str(time.strftime('%Y%m%d_%H%M%S'))
                            ])    
     if args.init_weights is not None:
         save_path1 += '-Pre'
