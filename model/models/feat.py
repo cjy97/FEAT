@@ -193,13 +193,15 @@ class FEAT(FewShotModel):
             
             # print("s_relation: ", s_relation.size())    # [1, 80, 80, 25, 25]
 
-            top_k = 3
+            top_k = 1
             topk_value, _ = torch.topk(s_relation, top_k, dim=-1)  # [1, 80, 80, 25, k]
             student_relation = torch.sum(topk_value, dim=[3, 4])      # [1, 80, 80]
             student_relation = student_relation / (top_k * h*w)
+            student_relation = (student_relation + torch.transpose(student_relation, -1, -2) ) / 2
 
             # print("teacher_relation: ", teacher_relation)
             # print("student_relation: ", student_relation)
+
             
             criterion = nn.MSELoss(size_average=False, reduce=True)
             local_kd_loss = criterion(teacher_relation, student_relation)

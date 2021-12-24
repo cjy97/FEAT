@@ -16,7 +16,7 @@ python train_fsl.py  \
 --lr_mul 10 \
 --lr_scheduler step \
 --step_size 40 --gamma 0.5 \
---gpu 2 \
+--gpu 3 \
 --init_weights ./saves/initialization/miniimagenet/Res12-pre.pth \
 --eval_interval 1 \
 --use_euclidean \
