@@ -179,25 +179,32 @@ class FEAT(FewShotModel):
             # print("student_feat: ", student_feat.size())    # [80, 640, 5, 5]
             # print("teacher_feat: ", teacher_feat.size())    # [80, 640, 5, 5]
 
-            GAP = nn.AvgPool2d(5, stride=1)
-            teacher_feat = GAP(teacher_feat).view(teacher_feat.size(0), -1).unsqueeze(0)   # [1, 80, 640]
+            # GAP = nn.AvgPool2d(5, stride=1)
+            # teacher_feat = GAP(teacher_feat).view(teacher_feat.size(0), -1).unsqueeze(0)   # [1, 80, 640]
 
-            teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1), 
-                                            torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))    # [1, 80, 80]
+            # teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1), 
+                                            # torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))    # [1, 80, 80]
             
             student_feat = student_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim).unsqueeze(0)     # [1, 80, 25, 640]
-
-
             s_relation = torch.matmul(F.normalize(student_feat.unsqueeze(2), p=2, dim=-1),            # [1, 80, 1, 25, 640]
                       torch.transpose(F.normalize(student_feat.unsqueeze(1), p=2, dim=-1), -1, -2))   # [1, 1, 80, 640, 25]
-            
             # print("s_relation: ", s_relation.size())    # [1, 80, 80, 25, 25]
-
             top_k = 1
             topk_value, _ = torch.topk(s_relation, top_k, dim=-1)  # [1, 80, 80, 25, k]
             student_relation = torch.sum(topk_value, dim=[3, 4])      # [1, 80, 80]
             student_relation = student_relation / (top_k * h*w)
             student_relation = (student_relation + torch.transpose(student_relation, -1, -2) ) / 2
+
+
+            teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim).unsqueeze(0)     # [1, 80, 25, 640]
+            t_relation = torch.matmul(F.normalize(teacher_feat.unsqueeze(2), p=2, dim=-1),            # [1, 80, 1, 25, 640]
+                      torch.transpose(F.normalize(teacher_feat.unsqueeze(1), p=2, dim=-1), -1, -2))   # [1, 1, 80, 640, 25]
+            # print("s_relation: ", s_relation.size())    # [1, 80, 80, 25, 25]
+            top_k = 1
+            topk_value, _ = torch.topk(t_relation, top_k, dim=-1)  # [1, 80, 80, 25, k]
+            teacher_relation = torch.sum(topk_value, dim=[3, 4])      # [1, 80, 80]
+            teacher_relation = teacher_relation / (top_k * h*w)
+            teacher_relation = (teacher_relation + torch.transpose(teacher_relation, -1, -2) ) / 2
 
             # print("teacher_relation: ", teacher_relation)
             # print("student_relation: ", student_relation)
