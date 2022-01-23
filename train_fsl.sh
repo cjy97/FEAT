@@ -1,8 +1,8 @@
 python train_fsl.py  \
 --max_epoch 200 \
 --model_class FEAT \
---backbone_class Res12 \
---dataset TieredImageNet \
+--backbone_class ConvNet \
+--dataset CUB \
 --way 5 \
 --eval_way 5 \
 --shot 1 \
@@ -12,11 +12,11 @@ python train_fsl.py  \
 --balance 0.1 \
 --temperature 64 \
 --temperature2 64 \
---lr 0.0002 \
+--lr 0.0001 \
 --lr_mul 10 \
 --lr_scheduler step \
---step_size 40 --gamma 0.5 \
---gpu 1 \
---init_weights ./saves/initialization/tieredimagenet/Res12-pre.pth \
+--step_size 20 --gamma 0.5 \
+--gpu 3 \
+--init_weights ./saves/initialization/cub/con-pre.pth \
 --eval_interval 1 \
 --use_euclidean
