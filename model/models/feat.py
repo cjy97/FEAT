@@ -175,42 +175,42 @@ class FEAT(FewShotModel):
             
             # calc Local Distillation Loss while training
             student_feat = instance_embs
-            teacher_feat = self.distill_layer(x)
+            teacher_feat = self.distill_layer(x)    # 获取教师模型输出的中间特征
             # print("student_feat: ", student_feat.size())    # [80, 640, 5, 5]
             # print("teacher_feat: ", teacher_feat.size())    # [80, 640, 5, 5]
 
-            # GAP = nn.AvgPool2d(5, stride=1)
-            # teacher_feat = GAP(teacher_feat).view(teacher_feat.size(0), -1).unsqueeze(0)   # [1, 80, 640]
-
-            # teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1), 
-                                            # torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))    # [1, 80, 80]
+            GAP = nn.AvgPool2d(5, stride=1) # 由于backbone中原有的avg_pool层被注释掉了，这里重新定义一个
+            teacher_feat = GAP(teacher_feat).view(teacher_feat.size(0), -1).unsqueeze(0)   # [1, 80, 640]（一批图像的全局特征）
+            teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1),
+                                            torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))    # [1, 80, 80] （教师模型基于全局特征所得的image-level relation矩阵，必然对称）
             
+
             student_feat = student_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim).unsqueeze(0)     # [1, 80, 25, 640]
             s_relation = torch.matmul(F.normalize(student_feat.unsqueeze(2), p=2, dim=-1),            # [1, 80, 1, 25, 640]
                       torch.transpose(F.normalize(student_feat.unsqueeze(1), p=2, dim=-1), -1, -2))   # [1, 1, 80, 640, 25]
             # print("s_relation: ", s_relation.size())    # [1, 80, 80, 25, 25]
-            top_k = 1
+            top_k = 1   # k近邻数
             topk_value, _ = torch.topk(s_relation, top_k, dim=-1)  # [1, 80, 80, 25, k]
-            student_relation = torch.sum(topk_value, dim=[3, 4])      # [1, 80, 80]
-            student_relation = student_relation / (top_k * h*w)
-            student_relation = (student_relation + torch.transpose(student_relation, -1, -2) ) / 2
+            student_relation = torch.sum(topk_value, dim=[3, 4])      # [1, 80, 80] （学生模型基于局部特征所得的image-level relation矩阵）
+            student_relation = student_relation / (top_k * h*w)     # 这一步将数值范围归一化到[0, 1]
+            student_relation = (student_relation + torch.transpose(student_relation, -1, -2) ) / 2  # 由于k近邻度量并不对称，这一步通过sim =(sim(A, B) + sim(B, A))/2 的方式将其转化为对称
+            
 
+            # teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim).unsqueeze(0)     # [1, 80, 25, 640]
+            # t_relation = torch.matmul(F.normalize(teacher_feat.unsqueeze(2), p=2, dim=-1),            # [1, 80, 1, 25, 640]
+            #           torch.transpose(F.normalize(teacher_feat.unsqueeze(1), p=2, dim=-1), -1, -2))   # [1, 1, 80, 640, 25]
+            # # print("s_relation: ", s_relation.size())    # [1, 80, 80, 25, 25]
 
-            teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim).unsqueeze(0)     # [1, 80, 25, 640]
-            t_relation = torch.matmul(F.normalize(teacher_feat.unsqueeze(2), p=2, dim=-1),            # [1, 80, 1, 25, 640]
-                      torch.transpose(F.normalize(teacher_feat.unsqueeze(1), p=2, dim=-1), -1, -2))   # [1, 1, 80, 640, 25]
-            # print("s_relation: ", s_relation.size())    # [1, 80, 80, 25, 25]
-            top_k = 1
-            topk_value, _ = torch.topk(t_relation, top_k, dim=-1)  # [1, 80, 80, 25, k]
-            teacher_relation = torch.sum(topk_value, dim=[3, 4])      # [1, 80, 80]
-            teacher_relation = teacher_relation / (top_k * h*w)
-            teacher_relation = (teacher_relation + torch.transpose(teacher_relation, -1, -2) ) / 2
+            # top_k = 1
+            # topk_value, _ = torch.topk(t_relation, top_k, dim=-1)  # [1, 80, 80, 25, k]
+            # teacher_relation = torch.sum(topk_value, dim=[3, 4])      # [1, 80, 80]
+            # teacher_relation = teacher_relation / (top_k * h*w)
+            # teacher_relation = (teacher_relation + torch.transpose(teacher_relation, -1, -2) ) / 2
 
             # print("teacher_relation: ", teacher_relation)
             # print("student_relation: ", student_relation)
 
-            
-            criterion = nn.MSELoss(size_average=False, reduce=True)
+            criterion = nn.MSELoss(size_average=False, reduce=True) # L2 loss
             local_kd_loss = criterion(teacher_relation, student_relation)
             print("local_kd_loss: ", local_kd_loss)
             
