@@ -11,12 +11,32 @@ THIS_PATH = osp.dirname(__file__)
 ROOT_PATH = osp.abspath(osp.join(THIS_PATH, '..', '..'))
 ROOT_PATH2 = osp.abspath(osp.join(THIS_PATH, '..', '..', '..'))
 # IMAGE_PATH1 = osp.join(ROOT_PATH2, 'data/miniimagenet/images')
-IMAGE_PATH1 = "/data/yxs/miniImageNet--ravi/images"
+IMAGE_PATH1 = "/data/fewshot/miniImageNet--ravi/images"
 SPLIT_PATH = osp.join(ROOT_PATH, 'data/miniimagenet/split')
 CACHE_PATH = osp.join(ROOT_PATH, '.cache/')
 
 def identity(x):
     return x
+
+
+# for Swin pretraining
+def build_transforms():
+    image_size = 224
+    
+    transforms_list = [
+                  transforms.RandomResizedCrop(image_size),
+                  transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4),
+                  transforms.RandomHorizontalFlip(),
+                  transforms.ToTensor(),
+                ]
+    
+    transform = transforms.Compose(
+                transforms_list + [
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+            ])
+
+    return transform
 
 class MiniImageNet(Dataset):
     """ Usage:
@@ -86,6 +106,9 @@ class MiniImageNet(Dataset):
                 transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
             ])         
+        elif args.backbone_class == "Swin":
+            self.transform = build_transforms()
+
         else:
             raise ValueError('Non-supported Network Types. Please Revise Data Pre-Processing Scripts.')
 

@@ -11,6 +11,25 @@ from model.utils import pprint, set_gpu, ensure_path, Averager, Timer, count_acc
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 
+class WarmUpLR(torch.optim.lr_scheduler._LRScheduler):
+    """warmup_training learning rate scheduler
+
+    Args:
+        optimizer: optimzier(e.g. SGD)
+        total_iters: totoal_iters of warmup phase
+    """
+    def __init__(self, optimizer, total_iters, last_epoch=-1):
+        
+        self.total_iters = total_iters
+        super().__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        """we will use the first m batches, and set the learning
+        rate to base_lr * m / total_iters
+        """
+        return [base_lr * self.last_epoch / (self.total_iters + 1e-8) for base_lr in self.base_lrs]
+
+
 # pre-train model, compute validation acc after 500 epoches
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -19,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--ngpu', type=int, default=1, help='0 = CPU.')
     parser.add_argument('--dataset', type=str, default='MiniImageNet', choices=['MiniImageNet', 'TieredImagenet', 'CUB'])    
-    parser.add_argument('--backbone_class', type=str, default='Res12', choices=['ConvNet', 'Res12'])
+    parser.add_argument('--backbone_class', type=str, default='Res12', choices=['ConvNet', 'Res12', 'Swin'])
     parser.add_argument('--schedule', type=int, nargs='+', default=[75, 150, 300], help='Decrease learning rate at these epochs.')
     parser.add_argument('--gamma', type=float, default=0.1)
     parser.add_argument('--query', type=int, default=15)    
@@ -60,10 +79,17 @@ if __name__ == '__main__':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=0.0005)
     elif 'Res' in args.backbone_class:
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, nesterov=True, weight_decay=0.0005)
+    elif "Swin" in args.backbone_class:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.05)
+        
     else:
         raise ValueError('No Such Encoder')    
     criterion = torch.nn.CrossEntropyLoss()
-    
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.max_epoch)
+    warmup_epoch = 20
+    warmup_scheduler = WarmUpLR(optimizer, warmup_epoch)
+
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
         if args.ngpu  > 1:
@@ -119,13 +145,18 @@ if __name__ == '__main__':
 
     timer = Timer()
     writer = SummaryWriter(logdir=args.save_path)
-    for epoch in range(init_epoch, args.max_epoch + 1):
-        # refine the step-size
-        if epoch in args.schedule:
-            initial_lr *= args.gamma
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = initial_lr
-        
+    for epoch in range(init_epoch, args.max_epoch + 1 + warmup_epoch):
+        # # refine the step-size
+        # if epoch in args.schedule:
+        #     initial_lr *= args.gamma
+        #     for param_group in optimizer.param_groups:
+        #         param_group['lr'] = initial_lr
+        if epoch < warmup_epoch:
+            warmup_scheduler.step()
+        else:
+            scheduler.step()
+        print("epoch{}  learning rate: {}".format(epoch, optimizer.param_groups[0]['lr']) )
+
         model.train()
         tl = Averager()
         ta = Averager()
