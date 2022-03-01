@@ -1,3 +1,4 @@
+# from tkinter import image_names
 import torch
 import os.path as osp
 from PIL import Image
@@ -12,12 +13,25 @@ ROOT_PATH = osp.abspath(osp.join(THIS_PATH, '..', '..'))
 ROOT_PATH2 = osp.abspath(osp.join(THIS_PATH, '..', '..', '..'))
 
 #IMAGE_PATH1 = osp.join(ROOT_PATH2, 'data/miniimagenet/images')
-IMAGE_PATH1 = "/data/yxs/miniImageNet--ravi/images"
+IMAGE_PATH1 = "/data/fewshot/miniImageNet--ravi/images"
 SPLIT_PATH = osp.join(ROOT_PATH, 'data/miniimagenet/split')
 CACHE_PATH = osp.join(ROOT_PATH, '.cache/')
 
 def identity(x):
     return x
+
+def build_transform():
+    image_size = 224
+
+    transform = transforms.Compose([
+        transforms.Resize(image_size + 8),
+        transforms.CenterCrop(image_size),
+        transforms.ToTensor(),
+
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                            std=[0.229, 0.224, 0.225])
+     ])
+    return transform
 
 class MiniImageNet(Dataset):
     """ Usage:
@@ -87,6 +101,8 @@ class MiniImageNet(Dataset):
                 transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
             ])         
+        elif args.backbone_class == 'Swin':
+            self.transform = build_transform()      
         else:
             raise ValueError('Non-supported Network Types. Please Revise Data Pre-Processing Scripts.')
 

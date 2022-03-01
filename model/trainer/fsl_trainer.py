@@ -179,8 +179,7 @@ class FSLTrainer(Trainer):
         # restore model args
         args = self.args
         # evaluation mode
-        #self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'max_acc.pth'))['params'])
-        self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'epoch-last.pth'))['params'])
+        self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'max_acc.pth'))['params'])
 
         self.model.eval()
         record = np.zeros((10000, 2)) # loss and acc

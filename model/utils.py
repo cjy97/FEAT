@@ -146,7 +146,7 @@ def get_command_line_parser():
                         choices=['MatchNet', 'ProtoNet', 'BILSTM', 'DeepSet', 'GCN', 'FEAT', 'FEATSTAR', 'SemiFEAT', 'SemiProtoFEAT']) # None for MatchNet or ProtoNet
     parser.add_argument('--use_euclidean', action='store_true', default=False)    
     parser.add_argument('--backbone_class', type=str, default='ConvNet',
-                        choices=['ConvNet', 'Res12', 'Res18', 'WRN'])
+                        choices=['ConvNet', 'Res12', 'Res18', 'WRN', 'Swin'])
     parser.add_argument('--dataset', type=str, default='MiniImageNet',
                         choices=['MiniImageNet', 'TieredImageNet', 'CUB'])
     

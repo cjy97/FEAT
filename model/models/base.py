@@ -21,6 +21,10 @@ class FewShotModel(nn.Module):
             hdim = 640
             from model.networks.WRN28 import Wide_ResNet
             self.encoder = Wide_ResNet(28, 10, 0.5)  # we set the dropout=0.5 directly here, it may achieve better results by tunning the dropout
+        elif args.backbone_class == 'Swin':
+            hdim = 768
+            from model.networks.Swin import SwinTransformer
+            self.encoder = SwinTransformer()
         else:
             raise ValueError('')
 

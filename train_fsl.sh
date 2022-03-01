@@ -1,7 +1,7 @@
 python train_fsl.py  \
 --max_epoch 200 \
 --model_class FEAT \
---backbone_class Res12 \
+--backbone_class Swin \
 --dataset MiniImageNet \
 --way 5 \
 --eval_way 5 \
@@ -10,15 +10,15 @@ python train_fsl.py  \
 --query 15 \
 --eval_query 15 \
 --balance 0.01 \
---temperature 12 \
+--temperature 1 \
 --temperature2 64 \
 --lr 0.0002 \
 --lr_mul 10 \
 --lr_scheduler step \
 --step_size 40 --gamma 0.5 \
---gpu 3 \
---init_weights ./saves/initialization/miniimagenet/Res12-pre.pth \
+--gpu 2 \
+--init_weights ./saves/initialization/Swin/max_acc_sim.pth \
 --eval_interval 1 \
 --use_euclidean \
---is_distill True \
---encoder_path ./saves/initialization/miniimagenet/Res12-pre.pth
+--is_distill False \
+# --encoder_path ./saves/initialization/miniimagenet/Res12-pre.pth
