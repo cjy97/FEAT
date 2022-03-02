@@ -131,6 +131,12 @@ def prepare_optimizer(model, args):
             lr=args.lr,
             # weight_decay=args.weight_decay, do not use weight_decay here
         )                
+    elif args.backbone_class == 'Swin':
+        optimizer = optim.AdamW(
+            model.encoder.parameters(),
+            lr=args.lr,
+            # weight_decay=args.weight_decay, do not use weight_decay here
+        )       
     else:
         # print("top_para: ", top_para)
         optimizer = optim.SGD(
