@@ -110,20 +110,20 @@ class FEAT(FewShotModel):
         # print("x.size(): ", x.size())   # [80, 3, 84, 84]
         instance_embs = self.encoder(x)
 
-        emb_dim = instance_embs.size(-1)
-        # b, emb_dim, h, w = instance_embs.size()
-        # episode_size = b // (self.args.way * (self.args.shot+self.args.query) )
+        # emb_dim = instance_embs.size(-1)
+        b, emb_dim, h, w = instance_embs.size()
+        episode_size = b // (self.args.way * (self.args.shot+self.args.query) )
 
 
         # organize support/query data
-        support = instance_embs[support_idx.contiguous().view(-1)].contiguous().view(*(support_idx.shape + (-1,)))
-        query   = instance_embs[query_idx.contiguous().view(-1)].contiguous().view(  *(query_idx.shape   + (-1,)))
-        # support = instance_embs[support_idx.contiguous().view(-1)].unsqueeze(0)
-        # query   = instance_embs[query_idx.contiguous().view(-1)].unsqueeze(0)
+        # support = instance_embs[support_idx.contiguous().view(-1)].contiguous().view(*(support_idx.shape + (-1,)))
+        # query   = instance_embs[query_idx.contiguous().view(-1)].contiguous().view(  *(query_idx.shape   + (-1,)))
+        support = instance_embs[support_idx.contiguous().view(-1)].unsqueeze(0)
+        query   = instance_embs[query_idx.contiguous().view(-1)].unsqueeze(0)
 
-        # support = support.view(episode_size, self.args.shot, self.args.way, emb_dim, h, w)
-        # support = support.permute(0, 2, 1, 3, 4, 5)
-        # support = support.contiguous().view(episode_size, self.args.way*self.args.shot, emb_dim, h, w)
+        support = support.view(episode_size, self.args.shot, self.args.way, emb_dim, h, w)
+        support = support.permute(0, 2, 1, 3, 4, 5)
+        support = support.contiguous().view(episode_size, self.args.way*self.args.shot, emb_dim, h, w)
         # print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
         # print("query: ", query.size())      # [1, 75, 640, 5, 5]
 
@@ -137,38 +137,38 @@ class FEAT(FewShotModel):
         # support = support.permute(0, 1, 4, 2, 3)
         # print("support: ", support.size())  # [1, 5*1, 640, 5, 5]
 
-        # logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
+        logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
         
 
-        # get mean of the support
-        proto = support.mean(dim=1) # Ntask x NK x d
-        print("proto: ", proto.size())      # [1, 5, 640]
-        num_batch = proto.shape[0]
-        num_proto = proto.shape[1]
-        num_query = np.prod(query_idx.shape[-2:])
-        print("num_query: ", num_query)     # 75
+        # # get mean of the support
+        # proto = support.mean(dim=1) # Ntask x NK x d
+        # # print("proto: ", proto.size())      # [1, 5, 640]
+        # num_batch = proto.shape[0]
+        # num_proto = proto.shape[1]
+        # num_query = np.prod(query_idx.shape[-2:])
+        # # print("num_query: ", num_query)     # 75
     
-        # query: (num_batch, num_query, num_proto, num_emb)
-        # proto: (num_batch, num_proto, num_emb)
-        # proto = self.slf_attn(proto, proto, proto)
-        if self.args.use_euclidean:
-            query = query.view(-1, emb_dim).unsqueeze(1) # (Nbatch*Nq*Nw, 1, d)
-            print("query: ", query.size())  # [75, 1, 640]
-            proto = proto.unsqueeze(1).expand(num_batch, num_query, num_proto, emb_dim).contiguous()
-            proto = proto.view(num_batch*num_query, num_proto, emb_dim) # (Nbatch x Nq, Nk, d)
-            print("proto: ", proto.size())  # [75, 5, 640]
+        # # query: (num_batch, num_query, num_proto, num_emb)
+        # # proto: (num_batch, num_proto, num_emb)
+        # # proto = self.slf_attn(proto, proto, proto)
+        # if self.args.use_euclidean:
+        #     query = query.view(-1, emb_dim).unsqueeze(1) # (Nbatch*Nq*Nw, 1, d)
+        #     # print("query: ", query.size())  # [75, 1, 640]
+        #     proto = proto.unsqueeze(1).expand(num_batch, num_query, num_proto, emb_dim).contiguous()
+        #     proto = proto.view(num_batch*num_query, num_proto, emb_dim) # (Nbatch x Nq, Nk, d)
+        #     # print("proto: ", proto.size())  # [75, 5, 640]
 
-            print((proto - query).size())                   # [75, 5, 640]
-            print(torch.sum((proto - query) ** 2, 2).size())# [75, 5]
+        #     # print((proto - query).size())                   # [75, 5, 640]
+        #     # print(torch.sum((proto - query) ** 2, 2).size())# [75, 5]
 
-            logits = - torch.sum((proto - query) ** 2, 2) / self.args.temperature
-            print("logits: ", logits.size())# [75, 5]   全部5*15=75个query样本关于5个类别原型的距离
-        else:
-            proto = F.normalize(proto, dim=-1) # normalize for cosine distance
-            query = query.view(num_batch, -1, emb_dim) # (Nbatch,  Nq*Nw, d)
+        #     logits = - torch.sum((proto - query) ** 2, 2) / self.args.temperature
+        #     # print("logits: ", logits.size())# [75, 5]   全部5*15=75个query样本关于5个类别原型的距离
+        # else:
+        #     proto = F.normalize(proto, dim=-1) # normalize for cosine distance
+        #     query = query.view(num_batch, -1, emb_dim) # (Nbatch,  Nq*Nw, d)
 
-            logits = torch.bmm(query, proto.permute([0,2,1])) / self.args.temperature
-            logits = logits.view(-1, num_proto)
+        #     logits = torch.bmm(query, proto.permute([0,2,1])) / self.args.temperature
+        #     logits = logits.view(-1, num_proto)
         
         # for regularization
         if self.training:

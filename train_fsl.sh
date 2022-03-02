@@ -16,8 +16,8 @@ python train_fsl.py  \
 --lr_mul 10 \
 --lr_scheduler step \
 --step_size 40 --gamma 0.5 \
---gpu 2 \
---init_weights ./saves/initialization/Swin/max_acc_sim.pth \
+--gpu 1 \
+--init_weights ./saves/initialization/Swin/swin-max_acc_sim.pth \
 --eval_interval 1 \
 --use_euclidean \
 --is_distill False \

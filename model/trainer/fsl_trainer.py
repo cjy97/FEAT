@@ -179,7 +179,8 @@ class FSLTrainer(Trainer):
         # restore model args
         args = self.args
         # evaluation mode
-        self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'max_acc.pth'))['params'])
+        # self.model.load_state_dict(torch.load(osp.join(self.args.save_path, 'max_acc.pth'))['params'])
+        self.model.load_state_dict(torch.load('checkpoints/MiniImageNet-FEAT-Swin-05w01s15q-Pre-DIS/40_0.5_lr0.0002mul10_step_T11.0T264.0_b0.01_bsz080_20220301_211401-NoAug/max_acc.pth')['params'])
 
         self.model.eval()
         record = np.zeros((10000, 2)) # loss and acc
