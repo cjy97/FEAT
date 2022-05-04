@@ -111,7 +111,7 @@ def compute_confidence_interval(data):
 
 def postprocess_args(args):            
     args.num_classes = args.way
-    save_path1 = '-'.join([args.dataset, args.model_class, args.backbone_class, '{:02d}w{:02d}s{:02}q'.format(args.way, args.shot, args.query)])
+    save_path1 = '-'.join([args.dataset, args.model_class, args.backbone_class, '{:02d}w{:02d}s{:02}q-{}-{}'.format(args.way, args.shot, args.query, args.kd_loss, args.kd_weight)])
     save_path2 = '_'.join([str('_'.join(args.step_size.split(','))), str(args.gamma),
                            'lr{:.2g}mul{:.2g}'.format(args.lr, args.lr_mul),
                            str(args.lr_scheduler), 
@@ -126,11 +126,14 @@ def postprocess_args(args):
         save_path1 += '-DIS'
     else:
         save_path1 += '-SIM'
+    if args.is_prune:
+        save_path1 += '-is_prune-' + '{}'.format(args.remove_ratio)
             
     if args.fix_BN:
         save_path2 += '-FBN'
     if not args.augment:
         save_path2 += '-NoAug'
+
             
     if not os.path.exists(os.path.join(args.save_dir, save_path1)):
         os.mkdir(os.path.join(args.save_dir, save_path1))
@@ -143,7 +146,7 @@ def get_command_line_parser():
     parser.add_argument('--episodes_per_epoch', type=int, default=100)
     parser.add_argument('--num_eval_episodes', type=int, default=600)
     parser.add_argument('--model_class', type=str, default='FEAT', 
-                        choices=['MatchNet', 'ProtoNet', 'BILSTM', 'DeepSet', 'GCN', 'FEAT', 'FEATSTAR', 'SemiFEAT', 'SemiProtoFEAT']) # None for MatchNet or ProtoNet
+                        choices=['DN4'])        #, 'MatchNet', 'ProtoNet', 'BILSTM', 'DeepSet', 'GCN', 'FEAT', 'FEATSTAR', 'SemiFEAT', 'SemiProtoFEAT']) # None for MatchNet or ProtoNet
     parser.add_argument('--use_euclidean', action='store_true', default=False)    
     parser.add_argument('--backbone_class', type=str, default='ConvNet',
                         choices=['ConvNet', 'Res12', 'Res18', 'WRN'])
@@ -181,4 +184,14 @@ def get_command_line_parser():
     parser.add_argument('--eval_interval', type=int, default=1)
     parser.add_argument('--save_dir', type=str, default='./checkpoints')
     
+    # new argument for distillation
+    parser.add_argument("--is_distill", action="store_true", default=False)
+    parser.add_argument("--teacher_backbone_class", type=str, choices=['Res12'])
+    parser.add_argument('--teacher_init_weights', type=str, default=None)
+    parser.add_argument('--kd_loss', type=str, choices=['KD', 'global_KD', 'relation_KD', 'local_KD'])
+    parser.add_argument('--kd_weight', type=float, default=1.0)
+
+    parser.add_argument('--is_prune', action="store_true", default=False)
+    parser.add_argument('--remove_ratio', type=float, default=0.0)
+
     return parser

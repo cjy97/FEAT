@@ -14,6 +14,8 @@ from model.models.graphnet import GCN
 from model.models.semi_feat import SemiFEAT
 from model.models.semi_protofeat import SemiProtoFEAT
 
+from model.models.DN4 import DN4
+
 class MultiGPUDataloader:
     def __init__(self, dataloader, num_device):
         self.dataloader = dataloader
@@ -100,7 +102,7 @@ def prepare_model(args):
         if args.backbone_class == 'ConvNet':
             pretrained_dict = {'encoder.'+k: v for k, v in pretrained_dict.items()}
         pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
-        print(pretrained_dict.keys())
+        print("load init_weights: ", pretrained_dict.keys())
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
 

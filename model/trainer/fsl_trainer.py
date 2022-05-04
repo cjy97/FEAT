@@ -4,6 +4,7 @@ import numpy as np
 
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 
 from model.trainer.base import Trainer
 from model.trainer.helpers import (
@@ -17,6 +18,10 @@ from model.utils import (
 from tensorboardX import SummaryWriter
 from collections import deque
 from tqdm import tqdm
+
+# local_kd = Local_KD(args.way, args.shot+args.query)
+mse_loss = nn.MSELoss(size_average=False, reduce=True)
+GAP = nn.AvgPool2d(5, stride=1)
 
 class FSLTrainer(Trainer):
     def __init__(self, args):
@@ -61,6 +66,11 @@ class FSLTrainer(Trainer):
             ta = Averager()
 
             start_tm = time.time()
+
+            correct = 0 #
+            total = 0   #
+            sum_ce_loss = 0.0
+            sum_kd_loss = 0.0
             for batch in self.train_loader:
                 self.train_step += 1
 
@@ -73,15 +83,90 @@ class FSLTrainer(Trainer):
                 self.dt.add(data_tm - start_tm)
 
                 # get saved centers
-                logits, reg_logits = self.para_model(data)
-                if reg_logits is not None:
-                    loss = F.cross_entropy(logits, label)
-                    total_loss = loss + args.balance * F.cross_entropy(reg_logits, label_aux)
+                # logits, reg_logits = self.para_model(data)
+                # if reg_logits is not None:
+                #     loss = F.cross_entropy(logits, label)
+                #     total_loss = loss + args.balance * F.cross_entropy(reg_logits, label_aux)
+                # else:
+                #     loss = F.cross_entropy(logits, label)
+                #     total_loss = F.cross_entropy(logits, label)
+
+                results = self.para_model(data)
+                # print("results: ", len(results))
+                if args.kd_loss == "KD":
+                    logits, teacher_logits = results
+
+                    # print("student_logits: ", logits.size())
+                    # print("teacher_logits: ", teacher_logits.size())
+                    if teacher_logits is not None:
+                        T = 4.0
+                        p_s = F.log_softmax(logits / T, dim=1)
+                        p_t = F.softmax(teacher_logits)
+                        # print("p_s: ", p_s)
+                        # print("p_t: ", p_t)
+                        kd_loss = F.kl_div(
+                            p_s,
+                            p_t,
+                            reduction='sum'
+                            # size_average=False
+                        ) #* (T**2)
+                    else:
+                        kd_loss = 0.0
+                elif args.kd_loss == "global_KD":
+                    logits, student_encoding, teacher_encoding = results
+                    # print("student_encoding: ", student_encoding.size())
+                    # print("teacher_encoding: ", teacher_encoding.size())
+                    if teacher_encoding is not None:
+                        student_feat = student_encoding
+                        teacher_feat = teacher_encoding
+
+                        student_feat = GAP(student_encoding).view(student_feat.size(0), -1).unsqueeze(0)
+                        teacher_feat = GAP(teacher_encoding).view(teacher_feat.size(0), -1).unsqueeze(0)
+                        
+                        print("student_feat: ", student_feat.size())
+                        print("teacher_feat: ", teacher_feat.size())
+
+
+                        # dim不一致如何解决？
+
+                    else:
+                        kd_loss = 0.0
+                elif args.kd_loss == "relation_KD":
+                    logits, student_encoding, teacher_encoding = results
+
+                    if teacher_encoding is not None:
+                        student_feat = student_encoding
+                        teacher_feat = teacher_encoding
+
+                        student_feat = GAP(student_encoding).view(student_feat.size(0), -1).unsqueeze(0)
+                        teacher_feat = GAP(teacher_encoding).view(teacher_feat.size(0), -1).unsqueeze(0)
+
+                        teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1),
+                                            torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))
+                        student_relation = torch.matmul(F.normalize(student_feat, p=2, dim=-1),
+                                            torch.transpose(F.normalize(student_feat, p=2, dim=-1), -1, -2))
+                        
+                        kd_loss = mse_loss(teacher_relation, student_relation)
+
+                    else:
+                        kd_loss = 0.0
                 else:
-                    loss = F.cross_entropy(logits, label)
-                    total_loss = F.cross_entropy(logits, label)
+                    logits = results[0]
+                    kd_loss = 0.0
+
+                ce_loss = F.cross_entropy(logits, label)
+                kd_loss = kd_loss * args.kd_weight
+                print("ce_loss: ", ce_loss)
+                print("kd_loss: ", kd_loss)
+                total_loss = ce_loss + kd_loss
+
+                sum_ce_loss += ce_loss
+                sum_kd_loss += kd_loss
+                _, predicted = torch.max(logits, dim=1)
+                correct += (predicted==label).sum().item()
+                total += label.size()[0]
                     
-                tl2.add(loss)
+                tl2.add(ce_loss)
                 forward_tm = time.time()
                 self.ft.add(forward_tm - data_tm)
                 acc = count_acc(logits, label)
@@ -102,7 +187,8 @@ class FSLTrainer(Trainer):
                 start_tm = time.time()
 
             self.lr_scheduler.step()
-            self.try_evaluate(epoch)
+            vl, va, vap = self.try_evaluate(epoch)
+            self.epoch_record(epoch, vl, va, vap, train_acc = correct/total, avg_ce_loss = sum_ce_loss / len(self.train_loader), avg_kd_loss = sum_kd_loss / len(self.train_loader))
 
             print('ETA:{}/{}'.format(
                     self.timer.measure(),
@@ -206,3 +292,8 @@ class FSLTrainer(Trainer):
             f.write('Test acc={:.4f} + {:.4f}\n'.format(
                 self.trlog['test_acc'],
                 self.trlog['test_acc_interval']))            
+
+    def epoch_record(self, epoch, vl, va, vap, train_acc, avg_ce_loss, avg_kd_loss):
+        print(self.args.save_path)
+        with open(osp.join(self.args.save_path, 'record.txt'), 'a') as f:
+            f.write('epoch {}: train_acc={:.4f}, eval_loss={:.4f}, eval_acc={:.4f}+{:.4f}, avg_ce_loss={:.4f}, avg_kd_loss={:.4f}\n'.format(epoch, train_acc, vl, va, vap, avg_ce_loss, avg_kd_loss))

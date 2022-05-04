@@ -40,15 +40,17 @@ class FewShotModel(nn.Module):
         else:
             # feature extraction
             x = x.squeeze(0)
-            instance_embs = self.encoder(x)
-            num_inst = instance_embs.shape[0]
+            # instance_embs = self.encoder(x)
+            # num_inst = instance_embs.shape[0]
             # split support query set for few-shot data
             support_idx, query_idx = self.split_instances(x)
             if self.training:
-                logits, logits_reg = self._forward(instance_embs, support_idx, query_idx)
-                return logits, logits_reg
+                # logits, logits_reg = self._forward(instance_embs, support_idx, query_idx)
+                result = self._forward(x, support_idx, query_idx)
+                return result
             else:
-                logits = self._forward(instance_embs, support_idx, query_idx)
+                # logits = self._forward(instance_embs, support_idx, query_idx)
+                logits = self._forward(x, support_idx, query_idx)
                 return logits
 
     def _forward(self, x, support_idx, query_idx):

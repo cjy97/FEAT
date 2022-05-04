@@ -7,6 +7,8 @@ from torchvision import transforms
 from tqdm import tqdm
 import numpy as np
 
+from .randaugment import RandAugment
+
 THIS_PATH = osp.dirname(__file__)
 ROOT_PATH = osp.abspath(osp.join(THIS_PATH, '..', '..'))
 ROOT_PATH2 = osp.abspath(osp.join(THIS_PATH, '..', '..', '..'))
@@ -49,10 +51,16 @@ class MiniImageNet(Dataset):
         image_size = 84
         if augment and setname == 'train':
             transforms_list = [
-                  transforms.RandomResizedCrop(image_size),
-                  transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4),
-                  transforms.RandomHorizontalFlip(),
-                  transforms.ToTensor(),
+                #   transforms.RandomResizedCrop(image_size),
+                #   transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4),
+                #   transforms.RandomHorizontalFlip(),
+                #   transforms.ToTensor(),
+
+                transforms.Resize((96, 96)),
+                transforms.RandomCrop((84, 84)),
+                RandAugment(),
+                transforms.ToTensor(),
+
                 ]
         else:
             transforms_list = [
