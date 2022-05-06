@@ -126,6 +126,15 @@ class FSLTrainer(Trainer):
                         print("student_feat: ", student_feat.size())
                         print("teacher_feat: ", teacher_feat.size())
 
+                        T = 4.0
+                        p_s = F.log_softmax(student_feat / T, dim=1)
+                        p_t = F.softmax(teacher_feat)
+                        kd_loss = F.kl_div(
+                            p_s,
+                            p_t,
+                            # reduction='sum'
+                            size_average=True
+                        ) #* (T**2)
 
                         # dim不一致如何解决？
 
