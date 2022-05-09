@@ -23,6 +23,97 @@ from tqdm import tqdm
 mse_loss = nn.MSELoss(size_average=False, reduce=True)
 GAP = nn.AvgPool2d(5, stride=1)
 
+class Local_KD(nn.Module):
+    def __init__(self, way_num, shot_query):
+        super(Local_KD, self).__init__()
+
+        self.way_num = way_num
+        self.shot_query = shot_query
+        # self.n_k = n_k
+        # self.device = device
+        # self.normLayer = nn.BatchNorm1d(self.way_num * 2, affine=True)
+        # self.fcLayer = nn.Conv1d(1, 1, kernel_size=2, stride=1, dilation=5, bias=False)
+    
+    # def _cal_cov_matrix_batch(self, feat):
+    #     e, _, n_local, c = feat.size()
+    #     feature_mean = torch.mean(feat, 2, True)
+    #     feat = feat - feature_mean
+    #     cov_matrix = torch.matmul(feat.permute(0, 1, 3, 2), feat)
+    #     cov_matrix = torch.div(cov_matrix, n_local-1)
+    #     cov_matrix = cov_matrix + 0.01 * torch.eye(c).to(self.device)
+
+    #     return feature_mean, cov_matrix
+
+    def _cal_cov_batch(self, feat):
+        e, b, c, h, w = feat.size()
+        feat = feat.view(e, b, c, -1).permute(0, 1, 3, 2).contiguous()   # e, b, h*w, c
+        feat = feat.view(e, 1, b*h*w, c)                    # e, 1, b*h*w, c
+        feat_mean = torch.mean(feat, 2, True)               # e, 1, 1, c
+        feat = feat - feat_mean
+        cov_matrix = torch.matmul(feat.permute(0, 1, 3, 2), feat)   # e, 1, c, c
+        cov_matrix = torch.div(cov_matrix, b*h*w-1) # b*h*w !!
+        cov_matrix = cov_matrix + 0.01 * torch.eye(c).cuda() #to(self.device)
+
+        return feat_mean, cov_matrix
+
+    def _calc_kl_dist_batch(self, mean1, cov1, mean2, cov2):
+        print("mean1: ", mean1.size())  # [e, 1, 1, 640]
+        print("cov1: ", cov1.size())    # [e, 1, 640, 640]
+        print("mean2: ", mean2.size())  # [e, 1, 1, 640]
+        print("cov2: ", cov2.size())    # [e, 1, 640, 640]
+
+        cov2_inverse = torch.inverse(cov2)
+        mean_diff = -(mean1 - mean2.squeeze(2).unsqueeze(1))
+
+        matrix_prod = torch.matmul(
+            cov1.unsqueeze(2), cov2_inverse.unsqueeze(1)
+        )
+        # print("matrix_prod: ", matrix_prod.size())
+
+        trace_dist = torch.diagonal(matrix_prod, offset=0, dim1=-2, dim2=-1)
+        trace_dist = torch.sum(trace_dist, dim=-1)
+        # print("trace_dist: ", trace_dist.size())
+
+        maha_prod = torch.matmul(
+            mean_diff.unsqueeze(3), cov2_inverse.unsqueeze(1)
+        )
+        maha_prod = torch.matmul(maha_prod, mean_diff.unsqueeze(4))
+        maha_prod = maha_prod.squeeze(4)
+        maha_prod = maha_prod.squeeze(3)
+
+        matrix_det = torch.slogdet(cov2).logabsdet.unsqueeze(1) - torch.slogdet(
+            cov1
+        ).logabsdet.unsqueeze(2)
+
+        kl_dist = trace_dist + maha_prod + matrix_det - mean1.size(3)
+
+        return kl_dist / 2.0
+
+
+    # 输入单个episode的所有样本（不区分support/query），返还局部蒸馏损失。
+    def forward(self, student_feat, teacher_feat):
+        e, b, c, h, w = student_feat.size()
+
+        student_mean, student_cov = self._cal_cov_batch(student_feat)
+        student_mean = student_mean.permute(1, 0, 2, 3)
+        student_cov = student_cov.permute(1, 0, 2, 3)
+        # student_feat = student_feat.view(e, b, c, -1).permute(0, 1, 3, 2).contiguous()
+
+        teacher_mean, teacher_cov = self._cal_cov_batch(teacher_feat)
+        teacher_mean = teacher_mean.permute(1, 0, 2, 3)
+        teacher_cov = teacher_cov.permute(1, 0, 2, 3)
+        # teacher_feat = teacher_feat.view(e, b, c, -1).permute(0, 1, 3, 2).contiguous()
+
+        kl_dis = self._calc_kl_dist_batch(student_mean, student_cov, teacher_mean, teacher_cov)
+        print("kl_dis: ", kl_dis.size())    # [e, 1, 1]
+        # print(kl_dis)
+
+        kl_mean = kl_dis.mean()
+        print("kl_mean: ", kl_mean)
+
+        return kl_mean
+
+
 class FSLTrainer(Trainer):
     def __init__(self, args):
         super().__init__(args)
@@ -159,6 +250,53 @@ class FSLTrainer(Trainer):
 
                     else:
                         kd_loss = 0.0
+                elif args.kd_loss == "local_KD":
+                    logits, student_encoding, teacher_encoding = results
+
+                    student_feat = student_encoding.unsqueeze(0)
+                    teacher_feat = teacher_encoding.unsqueeze(0)
+
+                    local_kd = Local_KD(args.way, args.shot+args.query)
+                    kd_loss = local_kd(student_feat, teacher_feat)
+                
+                elif args.kd_loss == "local_KD_pos":
+                    logits, student_encoding, teacher_encoding = results
+
+                    student_feat = student_encoding
+                    teacher_feat = teacher_encoding
+
+                    T = 4.0
+                    p_s = F.log_softmax(student_feat / T, dim=1)
+                    p_t = F.softmax(teacher_feat / T, dim=1)
+                    kd_loss = F.kl_div(
+                        p_s,
+                        p_t,
+                        size_average=False
+                    ) * (T**2)
+                
+                elif args.kd_loss == "local_KD_rel":
+                    logits, student_encoding, teacher_encoding = results
+
+                    b, emb_dim, h, w = student_encoding.size()
+
+                    student_feat = student_encoding
+                    teacher_feat = teacher_encoding
+
+                    student_feat = student_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim)
+                    teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim)
+
+                    student_relation = torch.matmul(F.normalize(student_feat, p=2, dim=-1), 
+                                            torch.transpose(F.normalize(student_feat, p=2, dim=-1), -1, -2))
+
+                    teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1), 
+                                            torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))
+                    # print("teacher_relation matrix: ", teacher_relation.size()) # [80, 25, 25]
+                    # print("teacher_relation matrix: ", teacher_relation)
+
+                    # criterion = nn.L1Loss(size_average=False, reduce=True)
+                    criterion = nn.MSELoss(size_average=False, reduce=True)
+                    kd_loss = criterion(teacher_relation, student_relation)
+
                 else:
                     logits = results[0]
                     kd_loss = 0.0

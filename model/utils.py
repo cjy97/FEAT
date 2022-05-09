@@ -188,7 +188,7 @@ def get_command_line_parser():
     parser.add_argument("--is_distill", action="store_true", default=False)
     parser.add_argument("--teacher_backbone_class", type=str, choices=['Res12'])
     parser.add_argument('--teacher_init_weights', type=str, default=None)
-    parser.add_argument('--kd_loss', type=str, choices=['KD', 'global_KD', 'relation_KD', 'local_KD'])
+    parser.add_argument('--kd_loss', type=str, choices=['KD', 'global_KD', 'relation_KD', 'local_KD', 'local_KD_pos', 'local_KD_rel'])
     parser.add_argument('--kd_weight', type=float, default=1.0)
 
     parser.add_argument('--is_prune', action="store_true", default=False)

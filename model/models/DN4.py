@@ -83,8 +83,8 @@ class DN4(FewShotModel):
                 teacher_logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
 
                 return logits, teacher_logits
-            else:
 
+            else:       # 其他蒸馏损失，一律返回学生和教师各自的中间编码（局部特征）
                 student_encoding = instance_embs#.unsqueeze(0)
                 teacher_encoding = self.distill_layer(x)#.unsqueeze(0)
 
