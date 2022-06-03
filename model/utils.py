@@ -146,7 +146,7 @@ def get_command_line_parser():
     parser.add_argument('--episodes_per_epoch', type=int, default=100)
     parser.add_argument('--num_eval_episodes', type=int, default=600)
     parser.add_argument('--model_class', type=str, default='FEAT', 
-                        choices=['DN4'])        #, 'MatchNet', 'ProtoNet', 'BILSTM', 'DeepSet', 'GCN', 'FEAT', 'FEATSTAR', 'SemiFEAT', 'SemiProtoFEAT']) # None for MatchNet or ProtoNet
+                        choices=['DN4', 'ProtoNet'])        #, 'MatchNet', 'ProtoNet', 'BILSTM', 'DeepSet', 'GCN', 'FEAT', 'FEATSTAR', 'SemiFEAT', 'SemiProtoFEAT']) # None for MatchNet or ProtoNet
     parser.add_argument('--use_euclidean', action='store_true', default=False)    
     parser.add_argument('--backbone_class', type=str, default='ConvNet',
                         choices=['ConvNet', 'Res12', 'Res18', 'WRN'])

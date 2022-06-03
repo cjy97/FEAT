@@ -37,10 +37,14 @@ class DN4(FewShotModel):
         
         self.dn4_layer = DN4Layer(args.way, args.shot, args.query, n_k = 3)
 
+        self.GAP = nn.AvgPool2d(5, stride=1)
+        self.fc = nn.Linear(640, 64)
+
         self.distill_layer = DistillLayer(
             args.teacher_backbone_class,
             args.teacher_init_weights,
             args.is_distill,
+            args.kd_loss,
         ).requires_grad_(False)
 
         if args.is_prune:   # 如果指定了“剪枝”模式，则重置学生模型
@@ -65,6 +69,16 @@ class DN4(FewShotModel):
 
         if self.training:
             if self.args.kd_loss == "KD":   # 传统的基于分类logits的蒸馏方法，返回学生和教师各自计算出的logits
+                # （教师模型用线性分类头返回常规分类结果）
+                teacher_logits = self.distill_layer(x)
+
+                features = self.GAP(instance_embs)
+                student_logits = self.fc(features.view(features.size(0), -1))
+                
+                return logits, student_logits, teacher_logits   # 三个返回值分别是：学生模型的小样本分类预测 + 学生模型的常规分类预测 + 教师模型的常规分类预测
+
+
+                """ #(教师模型也按DN4方法返回小样本分类结果)已弃用
                 instance_embs = self.distill_layer(x)
 
                 if instance_embs is None:   # (仅当is_distill为false)
@@ -83,6 +97,7 @@ class DN4(FewShotModel):
                 teacher_logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
 
                 return logits, teacher_logits
+                """
 
             else:       # 其他蒸馏损失，一律返回学生和教师各自的中间编码（局部特征）
                 student_encoding = instance_embs#.unsqueeze(0)
@@ -93,7 +108,7 @@ class DN4(FewShotModel):
             return logits
 
         # forward函数有三种返回模式：
-        # 1、验证测试时，只返回logits； 
+        # 1、验证测试时，只返回logits；
         # 2、训练阶段，基于logits的蒸馏，返回学生logits和教师logits；
         # 3、训练阶段，基于特征/关系的蒸馏，返回学生logtis和学生、教师分别所得的encodings(局部特征集合)
 

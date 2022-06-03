@@ -15,12 +15,12 @@ python train_fsl.py  \
 --lr_scheduler step \
 --step_size 20 --gamma 0.5 \
 --augment \
---gpu 2 \
+--gpu 0 \
 --eval_interval 1 \
 --is_distill  \
 --teacher_backbone_class Res12 \
 --teacher_init_weights ./saves/initialization/miniimagenet/Res12-pre.pth \
---kd_loss local_KD_pos \
---kd_weight 0.01 \
+--kd_loss local_KD \
+--kd_weight 0.05 \
 --is_prune \
 --remove_ratio 0.5 \

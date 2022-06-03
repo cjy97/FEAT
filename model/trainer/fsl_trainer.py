@@ -185,13 +185,13 @@ class FSLTrainer(Trainer):
                 results = self.para_model(data)
                 # print("results: ", len(results))
                 if args.kd_loss == "KD":
-                    logits, teacher_logits = results
+                    logits, student_logits, teacher_logits = results
 
-                    # print("student_logits: ", logits.size())
+                    # print("student_logits: ", student_logits.size())
                     # print("teacher_logits: ", teacher_logits.size())
                     if teacher_logits is not None:
                         T = 4.0
-                        p_s = F.log_softmax(logits / T, dim=1)
+                        p_s = F.log_softmax(student_logits / T, dim=1)
                         p_t = F.softmax(teacher_logits)
                         # print("p_s: ", p_s)
                         # print("p_t: ", p_t)
@@ -264,6 +264,9 @@ class FSLTrainer(Trainer):
 
                     student_feat = student_encoding
                     teacher_feat = teacher_encoding
+                    # print("student_feat: ", student_feat.size())    # [80, 640, 5, 5]
+                    # print("teacher_feat: ", teacher_feat.size())
+                    # 这里本来应该将形如[bs, emb_dim, h, w]的feat数据变形成[bs*h*w, emb_dim]的形式，但经测试不转换其实对结果没有影响
 
                     T = 4.0
                     p_s = F.log_softmax(student_feat / T, dim=1)
