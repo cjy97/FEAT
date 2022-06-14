@@ -300,6 +300,48 @@ class FSLTrainer(Trainer):
                     criterion = nn.MSELoss(size_average=False, reduce=True)
                     kd_loss = criterion(teacher_relation, student_relation)
 
+                elif args.kd_loss == "ALL":
+                    logits, student_logits, teacher_logits, student_encoding, teacher_encoding = results
+                    b, emb_dim, h, w = student_encoding.size()
+
+
+                    T = 4.0
+                    p_s = F.log_softmax(student_logits / T, dim=1)
+                    p_t = F.softmax(teacher_logits)
+                    loss_KD = F.kl_div(
+                        p_s,
+                        p_t,
+                        reduction='sum'
+                        # size_average=False
+                    ) #* (T**2)
+                    
+
+                    student_feat = student_encoding
+                    teacher_feat = teacher_encoding
+                    T = 4.0
+                    p_s = F.log_softmax(student_feat / T, dim=1)
+                    p_t = F.softmax(teacher_feat / T, dim=1)
+                    loss_local_kd_pos = F.kl_div(
+                        p_s,
+                        p_t,
+                        size_average=False
+                    ) * (T**2)
+
+
+                    student_feat = student_encoding
+                    teacher_feat = teacher_encoding
+                    student_feat = student_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim)
+                    teacher_feat = teacher_feat.permute(0, 2, 3, 1).contiguous().view(b, h*w, emb_dim)
+                    student_relation = torch.matmul(F.normalize(student_feat, p=2, dim=-1), 
+                                            torch.transpose(F.normalize(student_feat, p=2, dim=-1), -1, -2))
+                    teacher_relation = torch.matmul(F.normalize(teacher_feat, p=2, dim=-1), 
+                                            torch.transpose(F.normalize(teacher_feat, p=2, dim=-1), -1, -2))
+                    criterion = nn.MSELoss(size_average=False, reduce=True)
+                    loss_local_kd_rel = criterion(teacher_relation, student_relation)
+
+                    kd_loss = loss_KD*1.0 + loss_local_kd_pos*1.0 + loss_local_kd_rel*1.0
+
+
                 else:
                     logits = results[0]
                     kd_loss = 0.0

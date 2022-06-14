@@ -15,7 +15,7 @@ class DistillLayer(nn.Module):
         super(DistillLayer, self).__init__()
         self.encoder = self._load_state_dict(teacher_backbone_class, teacher_init_weights, is_distill, type = "encoder.")
 
-        if kd_loss == "KD":     # 只有基于分类logits的传统蒸馏方法（KD），教师模型需要加载线性分类头
+        if kd_loss == "KD" or kd_loss == "ALL":     # 只有基于分类logits的传统蒸馏方法（KD）或全部损失方法并用时，教师模型需要加载线性分类头
             self.fc = self._load_state_dict(teacher_backbone_class, teacher_init_weights, is_distill, type = "fc.")
             self.GAP = nn.AvgPool2d(5, stride=1)
         else:

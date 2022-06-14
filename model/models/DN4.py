@@ -67,7 +67,7 @@ class DN4(FewShotModel):
         logits = self.dn4_layer(query, support).view(episode_size*self.args.way*self.args.query, self.args.way) / self.args.temperature
 
 
-        if self.training:
+        if self.training:     
             if self.args.kd_loss == "KD":   # 传统的基于分类logits的蒸馏方法，返回学生和教师各自计算出的logits
                 # （教师模型用线性分类头返回常规分类结果）
                 teacher_logits = self.distill_layer(x)
@@ -98,6 +98,17 @@ class DN4(FewShotModel):
 
                 return logits, teacher_logits
                 """
+
+            elif self.args.kd_loss == "ALL":
+                teacher_logits = self.distill_layer(x)
+
+                features = self.GAP(instance_embs)
+                student_logits = self.fc(features.view(features.size(0), -1))
+                
+                student_encoding = instance_embs#.unsqueeze(0)
+                teacher_encoding = self.distill_layer.encoder(x)#.unsqueeze(0)
+
+                return logits, student_logits, teacher_logits, student_encoding, teacher_encoding   # 
 
             else:       # 其他蒸馏损失，一律返回学生和教师各自的中间编码（局部特征）
                 student_encoding = instance_embs#.unsqueeze(0)

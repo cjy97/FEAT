@@ -20,7 +20,7 @@ python train_fsl.py  \
 --is_distill  \
 --teacher_backbone_class Res12 \
 --teacher_init_weights ./saves/initialization/miniimagenet/Res12-pre.pth \
---kd_loss local_KD \
---kd_weight 0.05 \
+--kd_loss ALL \
+--kd_weight 1.0 \
 --is_prune \
 --remove_ratio 0.5 \
